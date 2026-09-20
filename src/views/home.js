@@ -188,7 +188,7 @@ function speechCard(ctx, cd, s) {
   const textNode = el('p', { class: 'speech__text' })
   const card = el('section', { class: 'card card--flat rise', dataset: { reveal: '' }, 'data-delay': '1' }, [
     el('div', { class: 'speech-wrap' }, [
-      el('div', { class: 'speech' }, [
+      el('div', { class: 'speech speech--hoshino' }, [
         el('span', { class: 'speech__who' }, '小鸟游星野'),
         textNode
       ])

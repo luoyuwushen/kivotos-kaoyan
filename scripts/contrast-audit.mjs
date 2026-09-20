@@ -114,6 +114,34 @@ async function main() {
       const ctx = canvas.getContext('2d', { willReadFrequently: true })
       ctx.drawImage(img, 0, 0)
 
+      const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+
+      /*
+       * 天空面板的背景是渐变 + 辉光叠出来的，靠 token 推算一定算错。
+       * 但"逐元素在周围取像素"也不可靠——文字和背景在同一像素上分不开。
+       * 所以：先沿面板最左侧一条**确定没有文字**的竖条，取出一条背景亮度剖面，
+       * 后面所有面板内的文字，都按它自己的纵向位置去查这条剖面。
+       */
+      const panel = document.querySelector('.sky-panel')
+      let profile = null
+      if (panel) {
+        const pr = panel.getBoundingClientRect()
+        const stripX = Math.round(pr.left + 4) // 左内边距里，一定没有正文
+        const strip = ctx.getImageData(
+          stripX,
+          Math.round(pr.top + window.scrollY),
+          1,
+          Math.round(pr.height)
+        ).data
+        profile = { top: pr.top + window.scrollY, height: pr.height, data: strip }
+      }
+      const skyAt = (clientY) => {
+        if (!profile) return null
+        const y = Math.round(clientY + window.scrollY - profile.top)
+        const i = Math.max(0, Math.min(profile.height - 1, y)) * 4
+        return { r: profile.data[i], g: profile.data[i + 1], b: profile.data[i + 2] }
+      }
+
       const out = []
       for (const sel of selectors) {
         const node = document.querySelector(sel)
@@ -128,69 +156,85 @@ async function main() {
           continue
         }
 
-        // 关键：不能在文字框**内部**采样——大字号元素整框都是字形。
-        // 改成在框外扩一圈的环带里取样，再剔除与文字色相近的像素（描边/抗锯齿）。
         const fgRgb = (() => {
-          const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(node).color)
+          const m = /rgba?\(([^)]+)\)/.exec(style.color)
           if (!m) return null
           const p = m[1].split(',').map(Number)
           return { r: p[0], g: p[1], b: p[2] }
         })()
 
-        const pad = 6
-        const x0 = Math.max(0, Math.floor(rect.left - pad))
-        const x1 = Math.min(canvas.width - 1, Math.ceil(rect.right + pad))
-        const y0 = Math.max(0, Math.floor(rect.top + window.scrollY - pad))
-        const y1 = Math.min(canvas.height - 1, Math.ceil(rect.bottom + window.scrollY + pad))
-        if (x1 <= x0 || y1 <= y0) {
-          out.push({ sel, missing: true })
-          continue
-        }
-
-        const frame = ctx.getImageData(x0, y0, x1 - x0, y1 - y0).data
-        const w = x1 - x0
-        const bgPixels = []
-        for (let py = 0; py < y1 - y0; py++) {
-          for (let px = 0; px < w; px++) {
-            const i = (py * w + px) * 4
-            const c = { r: frame[i], g: frame[i + 1], b: frame[i + 2] }
-            // 丢掉和文字色太接近的像素（那就是字形本身）
-            if (fgRgb) {
-              const d = Math.abs(c.r - fgRgb.r) + Math.abs(c.g - fgRgb.g) + Math.abs(c.b - fgRgb.b)
-              if (d < 90) continue
-            }
-            bgPixels.push(c)
+        // 元素自己的底色（含半透明）。取不到就往上找最近的、有可见底色的祖先
+        // ——".countdown__meta span" 自己没有底，底在父级那个贴片上。
+        const ownBg = (() => {
+          const read = (str) => {
+            const m = /rgba?\(([^)]+)\)/.exec(str || '')
+            if (!m) return null
+            const p = m[1].split(',').map(Number)
+            return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }
           }
-        }
+          const fromRules = (elm) => {
+            let found = null
+            for (const sheet of document.styleSheets) {
+              let rules
+              try {
+                rules = sheet.cssRules
+              } catch {
+                continue
+              }
+              for (const rule of rules || []) {
+                if (!rule.selectorText || !rule.style) continue
+                let hit = false
+                try {
+                  hit = elm.matches(rule.selectorText)
+                } catch {
+                  hit = false
+                }
+                if (!hit) continue
+                const cand =
+                  read(rule.style.getPropertyValue('background-color')) ||
+                  read(rule.style.getPropertyValue('background'))
+                if (cand && cand.a > 0.05) found = cand
+              }
+            }
+            return found
+          }
 
-        const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
-        if (!bgPixels.length) {
-          out.push({ sel, missing: true, reason: '无背景像素' })
-          continue
-        }
-        bgPixels.sort((a, b) => lum(a) - lum(b))
-        // 取最亮与最暗两端的代表，最后挑对文字最不利的那个。
-        // 注意：小元素（按钮、标签）的外扩环带大部分是字形本身，
-        // 采样会偏悲观，所以对它们只作提示，不当硬失败。
-        const bg = bgPixels[Math.floor(bgPixels.length * 0.9)]
-        const bgDark = bgPixels[Math.floor(bgPixels.length * 0.1)]
+          let elm = node
+          let c = null
+          while (elm && elm !== document.documentElement) {
+            // 到天空面板就停：天色画在 ::before 上，getComputedStyle 读不到。
+            // 注意只在"已经上行到面板本身"时停，起始节点自己在面板里不算。
+            if (elm !== node && elm.classList?.contains('sky-panel')) break
+            const own = read(getComputedStyle(elm).backgroundColor)
+            c = own && own.a > 0.05 ? own : fromRules(elm)
+            if (c) break
+            elm = elm.parentElement
+          }
+          if (!c) return null
+          const under = skyAt(rect.top + rect.height / 2) || { r: 255, g: 255, b: 255 }
+          if (c.a >= 0.99) return { r: c.r, g: c.g, b: c.b }
+          return {
+            r: c.r * c.a + under.r * (1 - c.a),
+            g: c.g * c.a + under.g * (1 - c.a),
+            b: c.b * c.a + under.b * (1 - c.a)
+          }
+        })()
+
+        const inPanel = Boolean(node.closest('.sky-panel'))
+        const sky = inPanel ? skyAt(rect.top + rect.height / 2) : null
 
         out.push({
           sel,
           color: style.color,
           fontSize: parseFloat(style.fontSize),
           fontWeight: style.fontWeight,
-          bg,
-          bgDark,
-          // 元素自身有接近不透明的底色时，像素采样会落在自己的底上，直接读计算值更准
-          ownBg: (() => {
-            const bs = style.backgroundColor
-            const m = /rgba?\(([^)]+)\)/.exec(bs || '')
-            if (!m) return null
-            const p = m[1].split(',').map(Number)
-            const a = p.length > 3 ? p[3] : 1
-            return a >= 0.6 ? { r: p[0], g: p[1], b: p[2] } : null
-          })(),
+          ownBg,
+          sky,
+          skyLum: sky ? +lum(sky).toFixed(1) : null,
+          panelT: profile
+            ? ((rect.top + rect.height / 2 + window.scrollY - profile.top) / profile.height) * 100
+            : null,
+          fallbackBg: { r: 255, g: 255, b: 255 },
           text: (node.textContent || '').trim().slice(0, 24)
         })
       }
@@ -199,33 +243,38 @@ async function main() {
     [TARGETS, dataUrl]
   )
 
-  console.log('\n' + '选择器'.padEnd(26) + '字号'.padEnd(9) + '对比度'.padEnd(11) + '判定')
-  console.log('-'.repeat(80))
+  console.log('\n' + '选择器'.padEnd(24) + '字号'.padEnd(9) + '对比度'.padEnd(11) + '判定'.padEnd(14) + '天色位置')
+  console.log('-'.repeat(96))
   let fails = 0
   for (const row of rows) {
     if (row.missing) {
-      console.log(row.sel.padEnd(26) + '(未渲染)')
+      console.log(row.sel.padEnd(24) + '(未渲染)')
       continue
     }
     const fg = parseRgb(row.color)
     if (!fg) {
-      console.log(row.sel.padEnd(26) + '无法解析颜色')
+      console.log(row.sel.padEnd(24) + '无法解析颜色')
       continue
     }
-    // 优先用元素自己的不透明底色；否则用采样到的最不利背景
-    const light = relLum(fg) > 0.5
-    const worst = row.ownBg || (light ? row.bg : row.bgDark)
+    const dbg = process.env.AUDIT_DEBUG && (row.sel.includes('meta') || row.sel.includes('phase'))
+    if (dbg) console.log('   [debug]', row.sel, 'ownBg=', JSON.stringify(row.ownBg), 'sky=', JSON.stringify(row.sky))
+    // 背景优先级：元素自己的底色（半透明按天色剖面合成）> 天色剖面 > 白底
+    const worst = row.ownBg || row.sky || row.fallbackBg
     const r = ratio(over(fg, worst), worst)
     const large = row.fontSize >= 24 || (row.fontSize >= 18.66 && Number(row.fontWeight) >= 700)
     const need = large ? 3.0 : 4.5
     const ok = r >= need
     if (!ok) fails++
+    const where =
+      row.panelT != null
+        ? `天色 ${row.panelT.toFixed(0)}% · 亮度 ${row.skyLum}`
+        : ''
     console.log(
-      row.sel.padEnd(26) +
+      row.sel.padEnd(24) +
         `${row.fontSize}px`.padEnd(9) +
         `${r.toFixed(2)}:1`.padEnd(11) +
-        (ok ? 'PASS' : `FAIL 需 ${need}`) +
-        (row.text ? `  « ${row.text}` : '')
+        (ok ? 'PASS' : `FAIL 需 ${need}`).padEnd(14) +
+        where
     )
   }
   console.log('-'.repeat(80))

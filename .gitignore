@@ -3,16 +3,16 @@ node_modules/
 dist/
 .vite/
 
-# 本地验证截图（体积大，不进仓库；要归档的图放 docs/screenshots）
+# 本地验证截图与对照图（体积大，不进仓库；要归档的图放 docs/screenshots）
+*-shots/
+*-shots*/
 smoke-shots/
-local-shots/
-live-shots/
 live-final/
 live-verify/
-*-shots/
 
 # 设计调研资料（从官网抓的原始素材，几十 MB，只作本地参考，不进仓库也不部署）
 _ba_research/
+ba-recon/
 
 # 编辑器与系统
 .vscode/

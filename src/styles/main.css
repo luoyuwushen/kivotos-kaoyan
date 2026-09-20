@@ -16,12 +16,13 @@
 /* ---------------- 1. Tokens ---------------- */
 
 :root {
-  /* 天空分层：面板上半是"天顶"，下半化到"地平线"的浅色。
-     深色的那一半才敢放白字——对比度审计把天顶压到了这个深度。 */
-  --sky-1: #2b6fb4;
-  --sky-2: #4795d8;
-  --sky-3: #82c3ef;
-  --sky-4: #cfe8fa;
+  /* 天空分层。数值是按对比度审计反推的：
+     白字要 3:1（大字）就得压在天色 50% 以内，要 4.5:1（小字）就得压在 42% 以内。
+     所以渐变必须"深得久一点"，从 46% 之后才开始化到地平线。 */
+  --sky-1: #1d5c9e;
+  --sky-2: #2b74b8;
+  --sky-3: #3f8ccd;
+  --sky-4: #a8d6f2;
   --bg: #f4f9fe;
   --cloud: rgba(255, 255, 255, 0.9);
 
@@ -45,7 +46,7 @@
   /* 13px 以下的小字要 4.5:1，上一版的 #7c9cbb 在浅底上只有 2.7:1，压深 */
   --text-tertiary: #5c7d9d;
   /* 页脚专用：比 tertiary 再深一档，保证 12px 小字也过 AA */
-  --text-foot: #4a6b8c;
+  --text-foot: #456687;
 
   /* 强调色：官方站 #1189F9 起手 */
   --accent: #1189f9;
@@ -57,6 +58,9 @@
   --glow: #a7d8ea; /* 官方站 CSS 里那个真实的"光晕冰蓝"，全站辉光都用它 */
   --paper: #f8f8f8; /* 次级面板纸面 */
   --paper-warm: #dfdcce; /* 委托单那种票据纸 */
+  --strap-bg: rgba(var(--surface-rgb), 0.72);
+  --strap-bd: rgba(var(--surface-rgb), 0.9);
+  --chip-bg: rgba(8, 45, 80, 0.5);
 
   /* 角色色 */
   --hoshino: #f2a0bf;
@@ -156,6 +160,11 @@
 
   --paper: #16273a;
   --paper-warm: #2a3446;
+
+  /* 深色下天色本身就是深的，状态条的白底要收掉，否则糊成一片白 */
+  --strap-bg: rgba(var(--surface-rgb), 0.1);
+  --strap-bd: rgba(var(--surface-rgb), 0.16);
+  --chip-bg: rgba(4, 20, 36, 0.55);
 
   --sh-subtle: 0 2px 10px rgba(0, 0, 0, 0.3);
   --sh-elevated: 0 4px 18px rgba(0, 0, 0, 0.45);
@@ -1071,9 +1080,9 @@ canvas {
   position: absolute;
   inset: 0;
   z-index: -1;
-  /* 天光只压在右下角（云那一侧），左上留深，白字才站得住 */
-  background: radial-gradient(80% 50% at 82% 96%, rgba(var(--surface-rgb), 0.75) 0%, transparent 64%),
-    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 34%, var(--sky-3) 70%, var(--sky-4) 100%);
+  /* 天光只压在右下角（云那一侧），上 3/4 保持深色，白字才站得住 */
+  background: radial-gradient(85% 55% at 88% 100%, rgba(var(--surface-rgb), 0.8) 0%, transparent 62%),
+    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 34%, var(--sky-3) 58%, var(--sky-4) 82%, #e8f4fd 100%);
 }
 
 .sky-panel::after {
@@ -1092,8 +1101,8 @@ canvas {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: clamp(0.75rem, 2.5vw, 1.5rem) clamp(1rem, 3vw, 2rem);
-  min-height: clamp(300px, 36vw, 400px);
+  gap: clamp(0.5rem, 2vw, 1rem) clamp(1rem, 3vw, 2rem);
+  min-height: clamp(290px, 34vw, 380px);
   padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1.5rem, 4vw, 2.5rem) clamp(1.25rem, 3vw, 2rem);
 }
 
@@ -1116,7 +1125,7 @@ canvas {
 
 .countdown__num {
   font-family: var(--font-num);
-  font-size: clamp(5rem, 17vw, 12rem);
+  font-size: clamp(4.75rem, 15vw, 10.5rem);
   font-weight: 800;
   line-height: 0.84;
   letter-spacing: -0.035em;
@@ -1126,19 +1135,31 @@ canvas {
 }
 
 .countdown__unit {
-  font-size: 0.26em;
+  display: inline-block;
+  font-size: 0.24em;
   font-weight: 800;
   color: #fff;
-  margin-left: 0.15em;
+  margin-left: 0.2em;
   letter-spacing: 0;
+  padding: 0.25em 0.5em 0.3em;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  vertical-align: 0.35em;
 }
 
+/* 小字在渐变的浅色段上会失守，所以自己带一层深色底。
+   这是天空面板上唯一允许的"贴片"，只为可读性存在。 */
 .countdown__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 0.875rem;
-  margin-top: 0.35rem;
-  font-size: 0.875rem;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  align-self: flex-start;
+  margin-top: 0.65rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  font-size: 0.8125rem;
   font-weight: 700;
   color: #fff;
 }
@@ -1185,9 +1206,9 @@ canvas {
   margin-top: clamp(1rem, 3vw, 1.75rem);
   padding: 0.625rem 1rem;
   border-radius: 999px;
-  /* 落在天色最亮的那一条上，所以自己带一层白底，把字压回可读 */
-  background: rgba(var(--surface-rgb), 0.72);
-  border: 1px solid rgba(var(--surface-rgb), 0.9);
+  /* 落在天色最亮的那一条上，所以自己带一层底，把字压回可读 */
+  background: var(--strap-bg);
+  border: 1px solid var(--strap-bd);
   font-size: 0.8125rem;
   font-weight: 700;
   color: var(--text-secondary);
@@ -1284,6 +1305,11 @@ canvas {
   opacity: 0.5;
 }
 
+/* 环会横穿数字，所以压低整体不透明度：它是氛围，不能跟倒计时抢读 */
+.halo {
+  opacity: 0.62;
+}
+
 .halo--2::before {
   animation-duration: 68s;
   animation-direction: reverse;
@@ -1327,7 +1353,8 @@ canvas {
 }
 
 .mascot--hero {
-  --mascot-size: clamp(120px, 15vw, 176px);
+  /* 上限 132px：SVG 是 128×160 的竖长比例，再大就把天空面板撑高了 */
+  --mascot-size: clamp(76px, 12vw, 132px);
 }
 
 .ch__svg {
@@ -1388,14 +1415,18 @@ canvas {
   box-shadow: var(--sh-subtle);
 }
 
+/* 角色气泡：边框走角色色，名字色单独给一个够深的变体 */
 .speech--hoshino {
   border-color: rgba(var(--hoshino-rgb), 0.55);
+  --speech-who: #9c3f6b;
 }
 .speech--arona {
   border-color: rgba(91, 200, 245, 0.55);
+  --speech-who: #0b6e96;
 }
 .speech--plana {
   border-color: rgba(169, 180, 216, 0.6);
+  --speech-who: #4e5c90;
 }
 
 /* 角色名标签：压深到 4.5:1，粉色标注也不能靠"浅"来表达 */
@@ -1404,22 +1435,8 @@ canvas {
   font-size: 0.8125rem;
   font-weight: 800;
   letter-spacing: 0.03em;
-  color: var(--hoshino-deep);
+  color: var(--speech-who, #9c3f6b);
   margin-bottom: 0.15rem;
-}
-
-.speech--hoshino {
-  --speech-who: #9c3f6b;
-}
-.speech--arona {
-  --speech-who: #0b6e96;
-}
-.speech--plana {
-  --speech-who: #4e5c90;
-}
-
-.speech__who {
-  color: var(--speech-who, var(--hoshino-deep));
 }
 
 :root[data-theme='dark'] .speech--arona .speech__who {
@@ -2224,9 +2241,10 @@ canvas {
     flex: 1 1 0;
     min-width: 0;
     justify-content: center;
-    gap: 0.35rem;
-    padding: 0.4rem 0.5rem;
-    font-size: 0.875rem;
+    gap: 0.3rem;
+    padding: 0.4rem 0.35rem;
+    font-size: 0.8125rem;
+    white-space: nowrap;
     position: relative;
   }
 
@@ -2241,11 +2259,15 @@ canvas {
   .hero {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
+    /* 单列时别让 countdown / 角色 / 状态条各自撑成一整行 */
+    align-content: start;
   }
 
   .hero__side {
     flex-direction: row;
-    justify-content: center;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 0.75rem;
     min-width: 0;
   }
 
@@ -2341,7 +2363,17 @@ canvas {
   }
 
   .mascot--hero {
-    --mascot-size: 104px;
+    /* SVG 是 128×160 的竖长比例，所以 76px 宽实际只占约 95px 高 */
+    --mascot-size: 76px;
+  }
+
+  /* 手机上把角色与等级标签并成一行，别让天空面板被撑高 */
+  .hero__side {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    min-width: 0;
   }
 
   .countdown__num {
