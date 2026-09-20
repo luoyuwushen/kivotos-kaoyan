@@ -36,19 +36,19 @@
 
 | 作战本部（首页） | 每日委托 |
 |---|---|
-| ![首页](docs/screenshots/desktop-home.png) | ![每日委托](docs/screenshots/desktop-quests.png) |
+| ![首页](docs/screenshots/desktop-home.jpg) | ![每日委托](docs/screenshots/desktop-quests.jpg) |
 
 | 阶段计划 | 专注计时 |
 |---|---|
-| ![阶段计划](docs/screenshots/desktop-plan.png) | ![专注计时](docs/screenshots/desktop-focus.png) |
+| ![阶段计划](docs/screenshots/desktop-plan.jpg) | ![专注计时](docs/screenshots/desktop-focus.jpg) |
 
 | 目标看板 | 勋章墙 |
 |---|---|
-| ![目标看板](docs/screenshots/desktop-goals.png) | ![勋章墙](docs/screenshots/desktop-medals.png) |
+| ![目标看板](docs/screenshots/desktop-goals.jpg) | ![勋章墙](docs/screenshots/desktop-medals.jpg) |
 
 | 深色模式 | 手机端 |
 |---|---|
-| ![深色模式](docs/screenshots/desktop-dark-home.png) | ![手机端](docs/screenshots/mobile-home.png) |
+| ![深色模式](docs/screenshots/desktop-dark-home.jpg) | ![手机端](docs/screenshots/mobile-home.jpg) |
 
 > 这些图是 `npm run smoke` 自动跑出来的，电脑 / 平板 / 手机三种宽度都验证过，没有横向溢出。
 
@@ -274,6 +274,19 @@ npm run smoke      # 自动截图 + 检查控制台错误与横向溢出（需�
 npm test           # 39 项交互功能测试（需先跑 preview）
 npm run test:scores # 15 项分数满分规则测试（需先跑 preview）
 ```
+
+**设计相关的三个脚本**（改配色 / 改样式之后建议都跑一遍）：
+
+```bash
+node scripts/contrast-audit.mjs  # 对比度审计：天空面板是渐变叠辉光，靠 token 推算一定算错，
+                                 # 所以它沿面板取一条无文字的竖条当背景亮度剖面，
+                                 # 再按每个文字元素的位置算 WCAG 对比度。当前全部达 AA。
+node scripts/audit-design.mjs    # DESIGN.md 合规：组件里不准出现硬编码颜色，字号要落在层级表内
+node scripts/ba-recon.mjs        # 设计调研：用真实浏览器打开官方站，抓 computed style 频次 + 截图
+                                 # （产物在 ba-recon/，已 gitignore，仅供重新取材时用）
+```
+
+**改配色请改 `DESIGN.md` 第 2 节的 token，不要直接在组件里写颜色** —— `audit-design.mjs` 会拦下来。
 
 **技术栈**：Vite + 原生 JavaScript ES Modules + 原生 CSS。
 打包产物零第三方运行时依赖，gzip 后约 41 KB。

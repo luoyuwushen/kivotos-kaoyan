@@ -54,16 +54,20 @@ lines.forEach((line, i) => {
   if (trimmed.startsWith('/*') || trimmed.startsWith('*')) return
 
   // data:image/svg+xml 里的颜色是内联图标，没法用变量，放行
-  const withoutDataUri = line.replace(/data:image\/svg\+xml[^")]*/g, '')
+  let work = line.replace(/data:image\/svg\+xml[^")]*/g, '')
+  // mask 里的 #000 只是"不透明"占位，只用到 alpha，颜色本身不参与渲染
+  work = work.replace(/[#]{1}000(?=\s+\d+%)/g, 'MASK')
+  // 注释里的颜色是说明文字，不参与渲染
+  work = work.replace(/\/\*.*$/, '')
 
   if (inTokenBlock(i)) return
 
-  const hexes = withoutDataUri.match(HEX)
+  const hexes = work.match(HEX)
   if (hexes) {
     hexCount += hexes.length
     fail(i + 1, `硬编码 hex：${hexes.join(', ')}`)
   }
-  if (RGB_FN.test(withoutDataUri)) {
+  if (RGB_FN.test(work)) {
     rgbCount++
     fail(i + 1, `硬编码 rgb()/rgba() 数值：${trimmed.slice(0, 70)}`)
   }
