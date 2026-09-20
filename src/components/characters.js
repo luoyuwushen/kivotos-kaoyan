@@ -251,8 +251,46 @@ export function characterById(id) {
 }
 
 /**
- * 角色挂件：带"呼吸"漂浮动画的小形象，可放在任意角落。
- * 若 public/characters/<id>.png 存在，则优先用图片（用户自定义替换）。
+ * 自定义形象的状态表。
+ * 之前是每次渲染都无条件往 characters/<id>.png 发请求，文件不存在时浏览器
+ * 控制台会刷一条 404 —— 每个用户每次打开都有，很误导。改成：
+ * 先探测一次，探到就缓存下来，探不到就永远不再请求。
+ */
+const customImageState = new Map() // id -> undefined 未探测 | string url 有 | null 没有
+
+// 站点根路径。用 baseURI 而不是相对路径，避免在带路径的 URL 下解析错位置。
+// （baseURI 只反映页面加载时的 base，所以进 SPA 子路由也不会被带偏。）
+function assetUrl(relative) {
+  try {
+    return new URL(relative, document.baseURI).href
+  } catch {
+    return relative
+  }
+}
+
+/** 探测一次自定义图片是否存在。用 fetch 而不是 <img>，因为失败的 <img> 会往控制台写 404。 */
+function probeCustomImage(id) {
+  if (customImageState.has(id)) return Promise.resolve(customImageState.get(id))
+  const url = assetUrl(`characters/${id}.png`)
+  return fetch(url, { method: 'GET', cache: 'force-cache' })
+    .then((res) => {
+      // 注意：静态站点对不存在的路径常返回 200 + HTML（GitHub Pages 的 404 页），
+      // 所以要连 content-type 一起判断，不能只看状态码。
+      const type = res.headers.get('content-type') || ''
+      const ok = res.ok && type.startsWith('image/')
+      customImageState.set(id, ok ? url : null)
+      return customImageState.get(id)
+    })
+    .catch(() => {
+      customImageState.set(id, null)
+      return null
+    })
+}
+
+/**
+ * 角色挂件：带"呼吸"漂浮动画的小形象。
+ * 若 public/characters/<id>.png 存在，会自动改用那张图（用户自定义替换）。
+ * 不存在就用内置的自绘 SVG，且不产生任何失败请求。
  */
 export function mascot(id, { size = 104, float = true } = {}) {
   const char = characterById(id)
@@ -260,17 +298,22 @@ export function mascot(id, { size = 104, float = true } = {}) {
   wrap.className = `mascot mascot--${id}${float ? ' mascot--float' : ''}`
   wrap.style.setProperty('--mascot-size', `${size}px`)
 
-  const img = document.createElement('img')
-  img.className = 'mascot__img'
-  img.alt = `${char.name}（自定义形象）`
-  img.hidden = true
-  img.addEventListener('load', () => {
-    img.hidden = false
-    wrap.querySelector('.ch__svg')?.setAttribute('hidden', '')
-  })
-  img.addEventListener('error', () => img.remove())
-  img.src = `characters/${id}.png`
+  const svgNode = char.svg()
+  wrap.append(svgNode)
 
-  wrap.append(img, char.svg())
+  probeCustomImage(id).then((url) => {
+    if (!url) return
+    const img = document.createElement('img')
+    img.className = 'mascot__img'
+    img.alt = `${char.name}（自定义形象）`
+    img.src = url
+    img.addEventListener('load', () => {
+      // 只在图片真的解码成功后才替换掉 SVG
+      svgNode.setAttribute('hidden', '')
+      wrap.prepend(img)
+    })
+    img.addEventListener('error', () => img.remove())
+  })
+
   return wrap
 }
