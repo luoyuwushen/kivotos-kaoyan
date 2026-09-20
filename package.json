@@ -1,0 +1,19 @@
+{
+  "name": "kivotos-kaoyan",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "基沃托斯作战本部 —— 28考研规划站（蔚蓝档案风格）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "init-deps": "npm install && npx playwright install chromium",
+    "smoke": "node scripts/smoke.mjs",
+    "test": "node scripts/interact.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "vite": "^7.1.0"
+  }
+}

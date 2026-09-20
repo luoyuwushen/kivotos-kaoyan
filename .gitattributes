@@ -1,0 +1,18 @@
+# 统一换行符，避免在 Windows 开发、Linux 构建时出现差异
+* text=auto eol=lf
+
+# 明确这些是二进制，不要做换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+
+# Windows 脚本保留 CRLF，方便直接双击/右键运行
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
