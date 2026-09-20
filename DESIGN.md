@@ -17,19 +17,35 @@
 
 上一版的问题不是"不够 BA"，是**太淡、太平、太均匀**：所有卡片同一个白底、同一个圆角、同一种边框，整页读起来像一张 Excel；蓝色 `#3D9BE9` 在浅底上饱和度不足，撑不起主角；侧栏塞了 5 行版权小字，把导航挤成了配角。
 
-本版依据**官方站实测 Token**（用 Playwright 打开官方站抓 `getComputedStyle`，脚本见 `scripts/ba-recon.mjs`，产物 `ba-recon/tokens.json` + 截图）：
+本版依据**官方站实测 Token**。取值方式：官方站是 JS SPA，直接抓 HTML 拿不到东西，所以用 Playwright 真实渲染（`scripts/ba-recon.mjs`，产物 `ba-recon/tokens.json` + 截图），并解析其编译后的 CSS bundle 取值。
 
 | 来源 | 实测值 | 本版如何用 |
 |------|--------|-----------|
-| 蔚蓝档案中文官网 `bluearchive-cn.com` | 主色 **`#1189F9`**（`fill` 第 2 位，`color` 第 5 位） | 收为本版 `--accent`，替换偏灰的 `#3D9BE9` |
-| 同上 | 面板 = 白底 + **2px `#1189F9` 实边框**（`border` 计数：`2px #1189f9` ×6） | 卡片边框 1.5px → **2px**，并且边框带蓝调而非灰调 |
-| 同上 | 圆角三档：**7.5px / 11.25px / 37.5px**，其余 0px | 收敛圆角：控件小圆角、面板中圆角、交互件胶囊 |
-| 同上 | 阴影 **`rgba(78,78,78,.54) 0 0 7.5px`** —— 贴身、几乎无位移 | 阴影改为**小半径、低位移、贴边**，不再是弥散大投影 |
-| 日服官网 `bluearchive.jp` | 晴空：饱和天蓝 → 白色积云 → 白色光晕；画面上叠**细密网格纹理**；导航= 深色半透条 + **青色 (#4DD0E1 系) 高亮下划线** | 全站背景层 + 顶栏导航态 |
-| 中文官网 | 标题下方**斜杠虚线饰带**（`////` 一排小斜杠） | 收为本站区块分隔符 `.strap` |
-| 两站共有 | 深海军蓝文字（`#14273B` / `#001747`）代替纯黑 | 沿用 `--text` 深藏青 |
+| 中文官网 CSS | 主色 **`#1189F9`**（全站出现 68 次，是最高频的颜色） | 收为本版 `--accent`，替换偏灰的 `#3D9BE9` |
+| 中文官网 CSS | 面板 = 白底 + **2px `#1189F9` 实边框** | 卡片边框 1.5px → **2px**，边框带蓝调而非灰调 |
+| 中文官网 CSS | **`#A7D8EA`** 是它所有 `box-shadow` 的用色 —— 这才是 BA 真正的"辉光" | 收为 `--glow`，全站阴影/辉光统一走它 |
+| 中文官网 CSS | 阴影是"宽、软、蓝"：`0 1px 1px 10px #A7D8EA`、`2px 4px 12px #A7D8EA` | 弃用弥散大投影与中性灰，改为 `--sh-*` 三档蓝调柔光 |
+| 中文官网 CSS | "双层描边"**不是**硬投影，是三层叠边：内发丝 + 内白高光 + 外辉光 | 收为 `--frame`，卡片默认用它 |
+| 中文官网 CSS | 频道色 `#21BBFF`、进度条渐变 `90deg #54DCFE → #1189F9` | 收为 `--accent-hover` / `.progress__fill` |
+| 中文官网 CSS | 动效只有三种时长：`.3s ease`（153 次）、`.5s ease`（144 次）、`1s ease`（168 次），无弹跳曲线；全站唯一的 keyframe 是 `3s ease-in-out infinite` 的漂浮 | 收为 `--t-fast/--t-mid/--t-slow/--t-float`，去掉所有 `cubic-bezier` 回弹 |
+| 中文官网 CSS | 列表行 hover **向左滑 8px**，左侧身份条同时填蓝 | 收为委托单条目的 hover |
+| 中文官网 CSS | 悬停态是两个字形的**交叉淡入**（叠两层 PNG 切 opacity），不是单属性过渡 | 见第 7 节 |
+| 中文官网 CSS | 圆角三档：**8px 标签 / 10–12px 按钮 / 16–20px 卡片 / 24–32px 最外层** | 收敛圆角，不再"什么都是 18px" |
+| 日服官网 | 晴空：饱和天蓝 → 白色积云 → 白色光晕；画面上**叠细密十字网格纹理**；导航= 深蓝半透条 + 青色高亮 | 全站背景层 + `--sky-*` + `.bg-hatch` |
+| 日服官网 | 大数字走**几何无衬线**（futura-pt-bold），不是圆体 | `--font-num` 改用 Poppins（免费替代） |
+| 两站共有 | 深海军蓝文字（`#14273B` / `#001744` / `#224463`）代替纯黑 | 沿用 `--text` 深藏青 |
+| 两站共有 | 正式 UI 的蓝是**强调色**，不是大面积底色（官网首页约 90% 是白底 + 深字） | 见下方"天空面板"的特殊处理 |
 
 **本项目的独有母题**：把「每日学习任务」当作基沃托斯发放的**委托单**，把「考研」当作一场长期作战。所有进度条、勾选框、徽章都从"学园事务局"这套世界观里长出来，而不是套通用待办清单。
+
+### 天空面板：一处**有意偏离**官方站口径的决定
+
+官方站证明"蓝是强调色，不是底色"。但这是一个每天要打开的备考工具，首页需要一处**仪式感**，需要"早上推开窗"的感觉——所以本版仍然把首页 Hero 做成整页唯一的饱和天空面板。这是自觉的偏离，代价用对比度审计补回来：
+
+- 面板切成两半 —— **上半是天顶（深，白字）**，**下半化到地平线（浅，深色字）**。
+- 面板内所有 13–14px 的小字（`countdown__meta`、`countdown__unit`）自带一层深色贴片 `--chip-bg`，保证它们落在任何天色段上都读得清。
+- 天空渐变的色标不是挑好看，是**按 WCAG AA 反推出来的**：白字要 4.5:1 就得压在面板 42% 以内，要 3:1（大字）就得压在 50% 以内。数值见第 2 节注释。
+- 审计脚本 `scripts/contrast-audit.mjs` 会沿面板最左一条**确定没有文字**的竖条取背景亮度剖面，再按每个文字元素的纵向位置查表算对比度。**当前 22 项文字全部达到 WCAG AA。**
 
 ---
 
@@ -37,11 +53,14 @@
 
 ```css
 :root {
-  /* ---- 天空分层：页面背景不是一块平色，是一天的天色 ---- */
-  --sky-1: #7CC2F2;                 /* 天顶：饱和晴空蓝（对应官方站 #1189F9 的浅位） */
-  --sky-2: #A9DBF8;
-  --sky-3: #D6EDFC;
-  --sky-4: #EEF7FE;                 /* 地平线：近白 */
+  /* ---- 天空分层 ----
+     数值是按对比度审计反推的，不是挑出来的：
+     白字要 4.5:1（小字）就得压在面板 42% 以内，
+     要 3:1（大字）就得压在 50% 以内，所以渐变必须"深得久一点"。 */
+  --sky-1: #1D5C9E;                 /* 天顶 */
+  --sky-2: #2B74B8;
+  --sky-3: #3F8CCD;
+  --sky-4: #A8D6F2;                 /* 地平线 */
   --bg: #F4F9FE;                    /* 落地底色：卡片外的"空气" */
   --cloud: rgba(255, 255, 255, 0.9);/* 云带：页脚那条发光白雾 */
 
@@ -51,9 +70,11 @@
   --surface-hover: #F7FBFF;
   --surface-sunken: #DCEBF9;        /* 凹槽：进度条底、统计块 */
 
-  /* ---- 半透明面板（浮在天空上的那层） ---- */
+  /* ---- 半透明面板 + 天空面板上的深色贴片 ---- */
   --panel-glass: rgba(255, 255, 255, 0.82);
-  --panel-solid: #FFFFFF;
+  --chip-bg: rgba(8, 45, 80, 0.5);          /* 13–14px 小字落在天色上的可读性保障 */
+  --strap-bg: rgba(255, 255, 255, 0.72);
+  --strap-bd: rgba(255, 255, 255, 0.9);
 
   /* ---- 边框：一律带蓝调，且比上一版更实 ---- */
   --border: #AFD3EF;
@@ -63,15 +84,17 @@
   /* ---- 文字 ---- */
   --text: #123A5C;                  /* 标题、数字：深藏青，替代纯黑 */
   --text-secondary: #3F6B90;
-  --text-tertiary: #7C9CBB;
+  --text-tertiary: #5C7D9D;         /* 13px 以下要 4.5:1，比上一版压深 */
+  --text-foot: #456687;             /* 页脚 12px 小字专用，再深一档 */
 
   /* ---- 强调色：官方站 #1189F9 起手 ---- */
   --accent: #1189F9;
   --accent-deep: #0A63BE;           /* hover 文字 / 实心投影底 */
   --accent-soft: #D3E9FE;           /* 选中底、进度槽 */
-  --accent-hover: #0B79E4;
-  --accent-sky: #6EC6FF;            /* 强调色的亮位：渐变上端、光标 */
-  --accent-ink: #0A3D6B;            /* 天上那种压得住的深蓝，用于实心面板 */
+  --accent-hover: #21BBFF;          /* 官方站实测 hover 色 */
+  --accent-sky: #54DCFE;            /* 极光青：进度条起点、光环边缘 */
+  --accent-ink: #0A3D6B;            /* 压得住的深蓝，用于实心面板/贴片 */
+  --glow: #A7D8EA;                  /* 官方站所有 box-shadow 的用色 —— BA 真正的辉光 */
 
   /* ---- 角色色（只用于角色自己的形象、台词气泡、对应勋章） ---- */
   --hoshino: #F2A0BF;               /* 小鸟游星野：粉 */
@@ -90,6 +113,7 @@
   --surface-rgb: 255, 255, 255;
   --accent-rgb: 17, 137, 249;
   --accent-ink-rgb: 10, 61, 107;
+  --glow-rgb: 167, 216, 234;
   --text-rgb: 18, 58, 92;
   --hoshino-rgb: 242, 160, 191;
 
@@ -105,6 +129,8 @@
 - 深色文字用 `--text`（深藏青）而不是纯黑，保持 BA 的通透感。
 - 语义色只表达状态，不用于装饰。
 - **天空层只用 `--sky-*`，卡片只用 `--surface*`，两者不串味**：天空永远在内容之下，面板永远在天空之上。
+- **所有辉光/阴影走 `--glow`（`#A7D8EA`）**，这是官方站实测的阴影用色，也是 BA 最核心的"发光感"来源。
+- 面板内的 13–14px 小字一律配 `--chip-bg` 贴片，保证落在任何天色段上都过 4.5:1。
 
 ---
 
@@ -332,26 +358,40 @@
 ### 4.7 光环（项目签名图形）
 
 ```css
-/* 倒计时身后缓慢转动的光环 —— 全站唯一的常驻装饰（在天空面板上转为白色） */
+/* 环不是"描边圆"，是被透视压扁的发光**环带**，而且环上有断口。
+   压扁交给容器（skew + scaleY），旋转交给 ::before，两者互不干扰。 */
 .halo {
   position: absolute;
   border-radius: 50%;
-  border: 3px solid rgba(var(--surface-rgb), 0.55);
-  box-shadow: 0 0 40px rgba(var(--surface-rgb), 0.45), inset 0 0 26px rgba(var(--surface-rgb), 0.28);
-  animation: halo-turn 22s linear infinite;
+  transform: skewX(-16deg) scaleY(0.3);
+  opacity: 0.62;              /* 环会横穿数字，压低不透明度：它是氛围，不抢读 */
   pointer-events: none;
+  z-index: -1;
 }
-.halo::after {                    /* 环上的缺口，让它不像普通圆圈 */
+.halo::before {
   content: '';
-  position: absolute; inset: -6px;
+  position: absolute; inset: 0;
   border-radius: 50%;
-  border: 3px solid transparent;
-  border-top-color: transparent;
-  border-right-color: rgba(var(--surface-rgb), 0.95);
-  transform: rotate(22deg);
+  /* conic 的缺口做出"环上有断口"；mask 把圆盘挖成一条环带 */
+  background: conic-gradient(from 0deg,
+    rgba(var(--surface-rgb), 0.95) 0deg 58deg,  transparent 58deg 88deg,
+    rgba(var(--surface-rgb), 0.95) 88deg 236deg, transparent 236deg 268deg,
+    rgba(var(--surface-rgb), 0.95) 268deg 360deg);
+  -webkit-mask: radial-gradient(closest-side, transparent 74%, #000 77%, #000 96%, transparent 100%);
+          mask: radial-gradient(closest-side, transparent 74%, #000 77%, #000 96%, transparent 100%);
+  filter: drop-shadow(0 0 7px rgba(var(--surface-rgb), 0.9))
+          drop-shadow(0 0 20px rgba(84, 220, 254, 0.75));
+  animation: halo-turn 44s linear infinite;   /* 20–60s/圈，几乎察觉不到，绝不是 loading spinner */
 }
 @keyframes halo-turn { to { transform: rotate(360deg); } }
 ```
+
+**尺寸**：基准 190px，第二层 0.68 倍，两层反向旋转（44s / 68s）。
+**层叠前提**：环必须挂在一个自成层叠上下文的容器里（`.countdown` 用 `isolation: isolate`），
+这样 `z-index: -1` 才能同时做到"盖住天色"和"垫在数字后面"。
+
+> 上一版用了 360px 的大环套住整个数字 —— 那不是 BA 的做法。官方的环是**悬在头顶的小环**：
+> 尺寸约等于两行字高、被透视**压扁**成椭圆、环身是发光的带而不是描边、且环上一定有断口。
 
 ### 4.8 委托单条目
 
@@ -458,12 +498,13 @@
 | Level | Treatment | Use |
 |-------|-----------|-----|
 | Flat | 无阴影，仅 2px 边框 | 列表条目、次级卡片 |
-| Subtle | `0 2px 6px rgba(var(--text-rgb), 0.06)` | 普通卡片（**小半径、贴身**，对应官方站 `0 0 7.5px` 口径） |
-| Elevated | `0 10px 26px -10px rgba(var(--accent-rgb), 0.35)` | 悬停卡片、弹窗 |
-| Sky | `0 18px 40px -18px rgba(var(--accent-rgb), 0.5)` | 天空面板（投影带主色，像天在发光） |
-| Pressed | `0 4px 0 var(--accent-deep)`（实心投影，非模糊） | 主按钮 |
+| Frame | `inset 0 0 0 1.5px rgba(accent,.2), inset 0 1px 0 #fff, 0 6px 22px rgba(glow,.5)` | **卡片默认**：官方站的"三层叠边"，不是硬投影 |
+| Subtle | `0 2px 10px rgba(glow, .45)` | 次级卡片、状态条 |
+| Elevated | `0 4px 18px rgba(glow, .7)` | 悬停卡片、弹窗 |
+| Sky | `0 12px 34px -6px rgba(glow, .85)` | 天空面板（投影带辉光色，像天在发光） |
+| Pressed | `0 3px 0 var(--accent-deep), 0 6px 16px rgba(accent,.35)` | 主按钮 |
 
-**规则**：阴影永远带蓝调（用 `--accent-rgb` / `--text-rgb`），**禁止中性灰 `rgba(0,0,0,.1)`**——那是通用 SaaS 卡片的特征。弹窗用 `backdrop-filter: blur(10px)`（≤ 14px）。
+**规则**：阴影永远带蓝调，辉光统一用 `--glow`（`#A7D8EA`，官方站所有 `box-shadow` 的实测用色），**禁止中性灰 `rgba(0,0,0,.1)`**——那是通用 SaaS 卡片的特征，也不是 BA 的做法。官方站实测的阴影是"宽、软、蓝"（`0 1px 1px 10px #A7D8EA`、`2px 4px 12px #A7D8EA`），本版按这个口径统一；"双层描边"用法也证明它**不是**硬偏移投影，而是上面那套 `--frame` 叠边。弹窗用 `backdrop-filter: blur(10px)`（≤ 14px）。
 
 ---
 
@@ -471,6 +512,18 @@
 
 **Motion Philosophy**: 动效只在"回应你的操作"和"一次负载入场"两处出现；其余一律静止。这是个每天要打开的工具，动效服务于"今天该干什么"的读取速度。
 **Tier**: L2
+
+### 时长与缓动（对齐官方站实测口径）
+```css
+:root {
+  --t-fast: 0.3s;   /* 默认：hover、颜色、小位移（官方站 153 处） */
+  --t-mid: 0.5s;    /* 面板、滑入、淡出（144 处） */
+  --t-slow: 1s;     /* 大块布局 / 区块切换（168 处） */
+  --t-float: 3s;    /* 全站唯一的常驻 keyframe：3s ease-in-out infinite */
+}
+```
+> **只用 `ease` / `ease-out`，不用 `cubic-bezier` 回弹。** 官方站整套动效系统里没有弹跳曲线，
+> 那种"平静"本身就是 BA 气质的一部分。上一版的 `cubic-bezier(0.34,1.56,0.64,1)` 已全部去掉。
 
 ### Dependencies
 无第三方库。IntersectionObserver（滚动 reveal）+ Web Animations API（一次性入场编排）+ CSS 关键帧。
@@ -528,7 +581,7 @@ const io = new IntersectionObserver((entries) => {
 ### Signature Moments（6 类，全部落地）
 | 类别 | 落点 | 实现 |
 |------|------|------|
-| Text — Hero | 倒计时数字：`clamp(5rem,17vw,12rem)` 巨型白色数字 + 逐位翻动 | 字号 + 光环 + `digit-roll` |
+| Text — Hero | 倒计时数字：`clamp(4.75rem,15vw,10.5rem)` 巨型白色数字 + 逐位翻动 | 字号 + 压扁光环 + `digit-roll` |
 | Text — Section H2 | 区块标题滚动 reveal 浮现 | `.rise` / IO |
 | Text — Body/Label | 星野台词逐字打字机（仅一次，可点击跳过） | `typewriter()` |
 | Element | 勾选委托：`check-pop` 弹跳；卡片轮换高光扫过 | CSS 关键帧 |
