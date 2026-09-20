@@ -11,12 +11,17 @@ export const DATA_VERSION = 1
 /** 28考研初试：2027 年 12 月 26 日（12 月第 4 个周末的周日，可在设置里改） */
 export const DEFAULT_EXAM_DATE = '2027-12-26'
 
-/** 四大科目。color 用 CSS 变量名，不写死颜色值 */
+/**
+ * 四大科目。
+ * color 用 CSS 变量名，不写死颜色值。
+ * full 是该科满分——考研里数学和专业课各 150，英语和政治各 100。
+ * 满分写在这里（而不是散落在各处传参），是为了让它不可能被设错。
+ */
 export const SUBJECTS = [
-  { id: 'math', name: '数学', short: '数', color: 'var(--accent)', tone: 'math' },
-  { id: 'english', name: '英语', short: '英', color: 'var(--arona)', tone: 'english' },
-  { id: 'politics', name: '政治', short: '政', color: 'var(--hoshino)', tone: 'politics' },
-  { id: 'major', name: '专业课', short: '专', color: 'var(--plana)', tone: 'major' }
+  { id: 'math', name: '数学', short: '数', full: 150, color: 'var(--accent)', tone: 'math' },
+  { id: 'english', name: '英语', short: '英', full: 100, color: 'var(--arona)', tone: 'english' },
+  { id: 'politics', name: '政治', short: '政', full: 100, color: 'var(--hoshino)', tone: 'politics' },
+  { id: 'major', name: '专业课', short: '专', full: 150, color: 'var(--plana)', tone: 'major' }
 ]
 
 export function subjectById(id) {
@@ -25,6 +30,17 @@ export function subjectById(id) {
 
 export function subjectName(id) {
   return subjectById(id).name
+}
+
+/** 该科满分：数学 150 / 英语 100 / 政治 100 / 专业课 150 */
+export function subjectFull(id) {
+  return subjectById(id).full || 150
+}
+
+/** 考研初试总分：150 + 100 + 100 + 150 = 500；不考数学则是 100 + 100 + 150 = 350 */
+export function totalFull(subjectSetId = 'math1') {
+  if (subjectSetId === 'no-math') return 350
+  return 500
 }
 
 /** 四个备考阶段的时间比例（相对"今天 → 考试"的总天数） */
@@ -467,19 +483,54 @@ export function dueMistakes(now = new Date()) {
 
 /* ---------------- 目标看板 ---------------- */
 
-export function setGoal({ subject, target, current = 0, full = 150 }) {
+/**
+ * 写入某科的目标分。
+ *
+ * 注意：**满分不接受外部传入**，一律由科目决定（数学/专业课 150，英语/政治 100）。
+ * 之前的写法是 full 默认 150，结果「设定总分目标」这条路径没传 full，
+ * 把英语和政治也写成了满分 150 —— 这是真实发生过的 bug，所以在这里根治。
+ */
+export function setGoal({ subject, target, current = 0, full }) {
+  const correctFull = subjectFull(subject) // 以科目为准，忽略调用方传错的值
   let goal = state.goals.find((g) => g.subject === subject)
   if (!goal) {
-    goal = { subject, target: 0, current: 0, full: 150 }
+    goal = { subject, target: 0, current: 0, full: correctFull }
     state.goals.push(goal)
   }
   Object.assign(goal, {
-    target: Number(target) || 0,
-    current: Number(current) || 0,
-    full: Number(full) || 150
+    target: Math.min(Math.max(Number(target) || 0, 0), correctFull),
+    current: Math.min(Math.max(Number(current) || 0, 0), correctFull),
+    full: correctFull
   })
   commit('goal:set')
   return goal
+}
+
+/**
+ * 把所有已有目标的 full 校正到该科的正确答案。
+ * 用于修掉老数据里「英语/政治满分 150」这种被写错的值。
+ * 返回被修正的条数。
+ */
+export function repairGoalFullMarks() {
+  let fixed = 0
+  for (const goal of state.goals) {
+    const correct = subjectFull(goal.subject)
+    if (goal.full !== correct) {
+      goal.full = correct
+      fixed += 1
+    }
+    // 顺便把超出满分的分数压回上限
+    if (goal.target > correct) {
+      goal.target = correct
+      fixed += 1
+    }
+    if (goal.current > correct) {
+      goal.current = correct
+      fixed += 1
+    }
+  }
+  if (fixed) commit('goal:repair')
+  return fixed
 }
 
 export function addScoreLine({ year, school, major = '', total, lines = {}, note = '' }) {
@@ -498,9 +549,16 @@ export function removeScoreLine(id) {
 }
 
 export function goalSummary() {
-  const target = state.goals.reduce((s, g) => s + g.target, 0)
-  const current = state.goals.reduce((s, g) => s + g.current, 0)
-  const full = state.goals.reduce((s, g) => s + g.full, 0)
+  let target = 0
+  let current = 0
+  let full = 0
+  for (const goal of state.goals) {
+    // 满分一律按科目算，不信任存量数据
+    const correct = subjectFull(goal.subject)
+    full += correct
+    target += Math.min(Math.max(Number(goal.target) || 0, 0), correct)
+    current += Math.min(Math.max(Number(goal.current) || 0, 0), correct)
+  }
   return { target, current, full, gap: Math.max(target - current, 0) }
 }
 

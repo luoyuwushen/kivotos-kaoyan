@@ -11,8 +11,11 @@ import {
   updateProfile,
   SUBJECTS,
   subjectById,
+  subjectFull,
+  totalFull,
   addScoreLine,
-  removeScoreLine
+  removeScoreLine,
+  repairGoalFullMarks
 } from '../lib/store.js'
 import { MATH_SCOPE, SCORE_REFERENCES, suggestTargets } from '../data/syllabus.js'
 import { icon } from '../components/icons.js'
@@ -133,7 +136,29 @@ function scoresCard(ctx) {
           el('span', { class: 'field__label' }, '总分进度'),
           el('span', { class: 'num', style: { fontWeight: '800' } }, `${summary.current} / ${summary.target}（还差 ${summary.gap}）`)
         ]),
-        progressBar(percent, { label: '总分进度' })
+        progressBar(percent, { label: '总分进度' }),
+        el('div', { class: 'dim-2', style: { fontSize: '0.75rem' } },
+          `四科满分合计 ${summary.full} 分（数学 150 + 英语 100 + 政治 100 + 专业课 150）`)
+      ])
+    )
+  }
+
+  /* 老数据校正：之前版本会把英语/政治的满分写成 150 */
+  const brokenFull = state.goals.filter((g) => g.full !== subjectFull(g.subject))
+  if (brokenFull.length) {
+    card.append(
+      el('div', { class: 'row', style: { marginBottom: '1rem' } }, [
+        el('span', { class: 'tag tag--warn' }, `${brokenFull.length} 科满分有误`),
+        el('span', { class: 'dim', style: { fontSize: '0.8125rem' } }, '旧版本把英语/政治写成了 150 分制'),
+        el('button', {
+          class: 'btn btn--sm btn--primary',
+          type: 'button',
+          onClick: () => {
+            const n = repairGoalFullMarks()
+            toast(n ? `已修正 ${n} 处分数设置` : '无需修正', { kind: 'ok', iconName: 'check' })
+            ctx.refresh()
+          }
+        }, '一键修正')
       ])
     )
   }
@@ -150,11 +175,14 @@ function scoresCard(ctx) {
 
   const list = el('div', { class: 'stack' })
   for (const subject of activeSubjects) {
-    const goal = state.goals.find((g) => g.subject === subject.id) || {
+    // 满分由科目决定：数学 150、英语 100、政治 100、专业课 150
+    const fullMark = subjectFull(subject.id)
+    const stored = state.goals.find((g) => g.subject === subject.id)
+    const goal = {
       subject: subject.id,
-      target: 0,
-      current: 0,
-      full: subject.id === 'english' || subject.id === 'politics' ? 100 : 150
+      target: stored?.target ?? 0,
+      current: stored?.current ?? 0,
+      full: fullMark
     }
     const percent = goal.target ? (goal.current / goal.target) * 100 : 0
     const gap = Math.max(goal.target - goal.current, 0)
@@ -163,24 +191,23 @@ function scoresCard(ctx) {
       class: 'input score-input num',
       type: 'number',
       min: '0',
-      max: String(goal.full),
+      max: String(fullMark),
       value: String(goal.target),
-      'aria-label': `${subject.name}目标分`
+      'aria-label': `${subject.name}目标分（满分 ${fullMark}）`
     })
     const currentInput = el('input', {
       class: 'input score-input num',
       type: 'number',
       min: '0',
-      max: String(goal.full),
+      max: String(fullMark),
       value: String(goal.current),
-      'aria-label': `${subject.name}当前估分`
+      'aria-label': `${subject.name}当前估分（满分 ${fullMark}）`
     })
     const commit = () => {
       setGoal({
         subject: subject.id,
         target: Number(targetInput.value) || 0,
-        current: Number(currentInput.value) || 0,
-        full: goal.full
+        current: Number(currentInput.value) || 0
       })
       ctx.refresh()
     }
@@ -224,19 +251,23 @@ function scoresCard(ctx) {
 }
 
 function setTotalDialog(ctx, summary) {
+  const cap = totalFull(state.profile.subjectSet)
   const input = el('input', {
     class: 'input',
     type: 'number',
     min: '0',
-    max: '500',
+    max: String(cap),
     value: String(summary.target || 320)
   })
   openModal({
     title: '设定总分目标',
     body: el('div', { class: 'stack' }, [
-      el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '目标总分'), input]),
+      el('label', { class: 'field' }, [
+        el('span', { class: 'field__label' }, `目标总分（满分 ${cap}）`),
+        input
+      ]),
       el('div', { class: 'dim-2', style: { fontSize: '0.8125rem', lineHeight: '1.7' } },
-        '设定后可以点「按总分自动拆解」，把总分按常见权重分到四科，再按你的实际情况微调。')
+        `保存后会按常见权重拆到四科：数学 150 分制、英语 100 分制、政治 100 分制、专业课 150 分制，拆完可以再手动微调。`)
     ]),
     actions: [
       { label: '取消' },
@@ -244,7 +275,9 @@ function setTotalDialog(ctx, summary) {
         label: '保存并拆解',
         kind: 'primary',
         onClick: () => {
-          const total = Math.max(0, Number(input.value) || 0)
+          const raw = Number(input.value) || 0
+          const total = Math.min(Math.max(raw, 0), cap)
+          if (raw > cap) toast(`总分不能超过 ${cap}，已按 ${cap} 处理`, { kind: 'error' })
           const suggestion = suggestTargets(total, state.profile.subjectSet)
           for (const item of suggestion) {
             if (state.profile.subjectSet === 'no-math' && item.subject === 'math') continue
