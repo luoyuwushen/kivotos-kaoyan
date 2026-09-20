@@ -29,8 +29,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-Write-Host "[探针] Username=[$Username] Repo=[$Repo] envUSERNAME=[$env:USERNAME]" -ForegroundColor Magenta
-
 function Write-Step($n, $text) {
   Write-Host ''
   Write-Host "=== [$n] $text ===" -ForegroundColor Cyan
@@ -186,32 +184,23 @@ if (-not $gitProxy) {
 $remoteUrl = "https://github.com/$Username/$Repo.git"
 
 # 先确认「用户名 + 仓库」在 GitHub 上真的存在。
-# 踩过的坑：用户把本机 git 的占位值（user.name=FPGA-Dev）当成 GitHub 用户名输进来，
-# 结果一路推到不存在的地址才报错，白折腾一轮。这里提前查一次并把话说清楚。
-function Test-GitHubRepo {
-  # 参数名别用 $Name —— 它和 PowerShell 的自动变量 $Name 冲突，
-  # 会让 URL 悄悄拼错成外部变量的值（这个坑真的踩过一次）。
-  param([string]$RepoOwner, [string]$RepoName, [string[]]$ProxyArgs)
-  $url = "https://api.github.com/repos/$RepoOwner/$RepoName"
-  $curlArgs = @('-s', '-o', 'NUL', '-w', '%{http_code}', '-m', '20', $url)
-  $proxyUrl = ($ProxyArgs | Where-Object { $_ -like 'https.proxy=*' } | Select-Object -First 1)
-  if ($proxyUrl) { $curlArgs = @('--proxy', ($proxyUrl -replace '^https\.proxy=', '')) + $curlArgs }
-  $old = $ErrorActionPreference
-  $ErrorActionPreference = 'Continue'
-  try {
-    $code = (& curl.exe @curlArgs 2>$null | Out-String).Trim()
-  } catch {
-    $code = '000'
-  } finally {
-    $ErrorActionPreference = $old
-  }
-  if (-not $code) { $code = '000' }
-  return $code
-}
+# 踩过的坑：把本机 git 配置里的占位值（user.name=FPGA-Dev）当成 GitHub 用户名输进来，
+# 结果一路推到不存在的地址才报错，白折腾一轮。这里提前查一次，把话说清楚。
+#
+# 这里刻意不封装成函数：PowerShell 里 $Name / $Username 这类变量容易和自动变量、
+# 外层作用域串味，内联写反而最不容易出错。
+$apiUrl = 'https://api.github.com/repos/' + $Username + '/' + $Repo
+$curlArgs = @('-s', '-o', 'NUL', '-w', '%{http_code}', '-m', '20')
+$proxyForCurl = ($gitProxy | Where-Object { $_ -like 'https.proxy=*' } | Select-Object -First 1)
+if ($proxyForCurl) { $curlArgs += @('--proxy', ($proxyForCurl -replace '^https\.proxy=', '')) }
+$curlArgs += $apiUrl
 
-Write-Host '  正在确认仓库是否存在…' -ForegroundColor DarkGray
-$repoCode = Test-GitHubRepo -RepoOwner $Username -RepoName $Repo -ProxyArgs $gitProxy
-Write-Host "[探针] url=https://api.github.com/repos/$Username/$Repo code=[$repoCode] proxyCount=$(($gitProxy | Measure-Object).Count)" -ForegroundColor Magenta
+Write-Host ("  正在确认仓库是否存在… ($apiUrl)") -ForegroundColor DarkGray
+$eapBackup = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$repoCode = (& curl.exe @curlArgs 2>$null | Out-String).Trim()
+$ErrorActionPreference = $eapBackup
+if (-not $repoCode) { $repoCode = '000' }
 
 switch ($repoCode) {
   '200' { Write-Ok "仓库存在：https://github.com/$Username/$Repo" }
@@ -229,6 +218,9 @@ switch ($repoCode) {
     exit 1
   }
   '401' { Write-Warn2 'GitHub 返回 401。如果这个仓库是私有的，请改成 Public 再试。' }
+  '403' {
+    Write-Warn2 'GitHub API 返回 403（多半是查询频率限制），跳过仓库检查，直接尝试推送。'
+  }
   '000' {
     Write-Warn2 '连不上 GitHub API，跳过仓库检查（多半是代理没开）。'
   }
