@@ -183,6 +183,53 @@ if (-not $gitProxy) {
 
 $remoteUrl = "https://github.com/$Username/$Repo.git"
 
+# 先确认「用户名 + 仓库」在 GitHub 上真的存在。
+# 踩过的坑：用户把本机 git 的占位值（user.name=FPGA-Dev）当成 GitHub 用户名输进来，
+# 结果一路推到不存在的地址才报错，白折腾一轮。这里提前查一次并把话说清楚。
+function Test-GitHubRepo {
+  param([string]$Owner, [string]$Name, [string[]]$ProxyArgs)
+  $url = "https://api.github.com/repos/$Owner/$Name"
+  $curlArgs = @('-s', '-o', 'NUL', '-w', '%{http_code}', '-m', '20', $url)
+  $proxyUrl = ($ProxyArgs | Where-Object { $_ -like 'https.proxy=*' } | Select-Object -First 1)
+  if ($proxyUrl) { $curlArgs = @('--proxy', ($proxyUrl -replace '^https\.proxy=', '')) + $curlArgs }
+  $old = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $code = (& curl.exe @curlArgs 2>$null | Out-String).Trim()
+  } catch {
+    $code = '000'
+  } finally {
+    $ErrorActionPreference = $old
+  }
+  if (-not $code) { $code = '000' }
+  return $code
+}
+
+Write-Host '  正在确认仓库是否存在…' -ForegroundColor DarkGray
+$repoCode = Test-GitHubRepo -Owner $Username -Name $Repo -ProxyArgs $gitProxy
+
+switch ($repoCode) {
+  '200' { Write-Ok "仓库存在：https://github.com/$Username/$Repo" }
+  '404' {
+    Write-Err2 "GitHub 上找不到仓库 https://github.com/$Username/$Repo"
+    Write-Host ''
+    Write-Host '  两种可能：' -ForegroundColor Yellow
+    Write-Host '   (1) 还没创建它 → 打开 https://github.com/new'
+    Write-Host "       仓库名填 $Repo ，可见性选 Public ，不要勾选 Add a README file"
+    Write-Host '   (2) 用户名填错了 → 打开 https://github.com/settings/profile'
+    Write-Host '       看 Username 那一栏，然后用正确的用户名重跑：'
+    Write-Host '         powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Username 正确的用户名' -ForegroundColor Cyan
+    Write-Host ''
+    Write-Host '   提醒：本机 git 配置里的 user.name 是占位值，不是你的 GitHub 用户名，别照抄。' -ForegroundColor Yellow
+    exit 1
+  }
+  '401' { Write-Warn2 'GitHub 返回 401。如果这个仓库是私有的，请改成 Public 再试。' }
+  '000' {
+    Write-Warn2 '连不上 GitHub API，跳过仓库检查（多半是代理没开）。'
+  }
+  default { Write-Warn2 "GitHub 返回 HTTP $repoCode，跳过仓库检查。" }
+}
+
 # 注意：Windows PowerShell 5.1 会把原生命令写往 stderr 的任何内容当成终止错误，
 # 所以"可能失败"的调用（比如还没有 origin 时查远程地址）要临时放宽错误策略。
 $oldEap = $ErrorActionPreference
