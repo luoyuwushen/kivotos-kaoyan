@@ -13,6 +13,7 @@
  */
 
 import { svg } from '../lib/utils.js'
+import { state } from '../lib/store.js'
 
 /* ---------------- 通用零件 ---------------- */
 
@@ -251,12 +252,17 @@ export function characterById(id) {
 }
 
 /**
- * 自定义形象的状态表。
- * 之前是每次渲染都无条件往 characters/<id>.png 发请求，文件不存在时浏览器
- * 控制台会刷一条 404 —— 每个用户每次打开都有，很误导。改成：
- * 先探测一次，探到就缓存下来，探不到就永远不再请求。
+ * 自定义形象（public/characters/<id>.png）。
+ *
+ * 这里有个绕不开的事实：**请求一个不存在的文件，浏览器必然在控制台留下 404**，
+ * 前端无法让它"静默失败"。所以策略是——**默认根本不去请求它**：
+ *   - 设置里 `customCharacters` 默认 false，没放图的人不会有任何多余请求
+ *   - 放了图的人自己去「设置 → 外观与角色」打开开关，此后才会加载
+ * 这样控制台噪声和"这个 404 是什么"的困惑就都没有了。
+ *
+ * 另外，探测结果（含进行中的 Promise）会按角色缓存，同一个角色只请求一次。
  */
-const customImageState = new Map() // id -> undefined 未探测 | string url 有 | null 没有
+const customImageState = new Map() // id -> Promise<string|null>
 
 // 站点根路径。用 baseURI 而不是相对路径，避免在带路径的 URL 下解析错位置。
 // （baseURI 只反映页面加载时的 base，所以进 SPA 子路由也不会被带偏。）
@@ -268,29 +274,32 @@ function assetUrl(relative) {
   }
 }
 
-/** 探测一次自定义图片是否存在。用 fetch 而不是 <img>，因为失败的 <img> 会往控制台写 404。 */
 function probeCustomImage(id) {
-  if (customImageState.has(id)) return Promise.resolve(customImageState.get(id))
+  if (customImageState.has(id)) return customImageState.get(id)
+
   const url = assetUrl(`characters/${id}.png`)
-  return fetch(url, { method: 'GET', cache: 'force-cache' })
+  const task = fetch(url, { cache: 'no-cache' })
     .then((res) => {
       // 注意：静态站点对不存在的路径常返回 200 + HTML（GitHub Pages 的 404 页），
-      // 所以要连 content-type 一起判断，不能只看状态码。
+      // 所以必须连 content-type 一起判断，不能只看状态码。
       const type = res.headers.get('content-type') || ''
-      const ok = res.ok && type.startsWith('image/')
-      customImageState.set(id, ok ? url : null)
-      return customImageState.get(id)
+      return res.ok && type.startsWith('image/') ? url : null
     })
-    .catch(() => {
-      customImageState.set(id, null)
-      return null
-    })
+    .catch(() => null)
+
+  customImageState.set(id, task)
+  return task
+}
+
+/** 让外部（设置页）在开关变化后清掉缓存，下次渲染重新判断 */
+export function resetCustomImageCache() {
+  customImageState.clear()
 }
 
 /**
  * 角色挂件：带"呼吸"漂浮动画的小形象。
- * 若 public/characters/<id>.png 存在，会自动改用那张图（用户自定义替换）。
- * 不存在就用内置的自绘 SVG，且不产生任何失败请求。
+ * 只有在设置里开启了自定义形象、且 public/characters/<id>.png 确实存在时，
+ * 才会换成那张图；否则一律使用内置的自绘 SVG。
  */
 export function mascot(id, { size = 104, float = true } = {}) {
   const char = characterById(id)
@@ -301,18 +310,20 @@ export function mascot(id, { size = 104, float = true } = {}) {
   const svgNode = char.svg()
   wrap.append(svgNode)
 
+  if (!state.settings.customCharacters) return wrap
+
   probeCustomImage(id).then((url) => {
     if (!url) return
     const img = document.createElement('img')
     img.className = 'mascot__img'
     img.alt = `${char.name}（自定义形象）`
-    img.src = url
     img.addEventListener('load', () => {
-      // 只在图片真的解码成功后才替换掉 SVG
+      // 只在图片真的解码成功后，才把 SVG 换掉
       svgNode.setAttribute('hidden', '')
       wrap.prepend(img)
     })
     img.addEventListener('error', () => img.remove())
+    img.src = url
   })
 
   return wrap

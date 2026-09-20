@@ -75,6 +75,10 @@ function defaultState() {
     settings: {
       theme: 'light',
       mascots: { hoshino: true, arona: true, plana: true, speech: true },
+      // 是否使用 public/characters/*.png 里的自定义角色图。
+      // 默认关闭：没放图的时候不该去请求一个不存在的文件（会产生 404 噪音）。
+      // 放了图之后在「设置 → 外观与角色」里打开即可。
+      customCharacters: false,
       aiApi: { baseUrl: '', apiKey: '', model: '', enabled: false },
       sync: { gistToken: '', gistId: '' }
     },

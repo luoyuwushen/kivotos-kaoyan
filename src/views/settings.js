@@ -17,7 +17,7 @@ import {
 } from '../lib/store.js'
 import { icon } from '../components/icons.js'
 import { toast, openModal, confirmDialog } from '../components/ui.js'
-import { CHARACTERS } from '../components/characters.js'
+import { CHARACTERS, resetCustomImageCache } from '../components/characters.js'
 import { isAiReady, aiConfig } from '../lib/ai.js'
 import { MATH_SCOPE } from '../data/syllabus.js'
 
@@ -125,6 +125,7 @@ function appearanceCard(ctx) {
   }
 
   const speechOn = state.settings.mascots.speech
+  const customOn = state.settings.customCharacters
   card.body.append(
     el('div', { class: 'stack' }, [
       field('主题', themeRow),
@@ -137,11 +138,54 @@ function appearanceCard(ctx) {
           onClick: () => { updateSettings({ mascots: { speech: !speechOn } }); ctx.refresh() }
         }, speechOn ? '开启（每天轮换）' : '已关闭')
       ])),
-      el('div', { class: 'dim-2', style: { fontSize: '0.75rem', lineHeight: '1.7' } },
-        '想换成自己的图片：把 PNG 命名为 hoshino.png / arona.png / plana.png，放进项目的 public/characters/ 目录即可自动替换站内自绘形象。')
+      field('自定义角色图', el('div', { class: 'row' }, [
+        el('button', {
+          class: 'chip',
+          type: 'button',
+          'aria-pressed': String(Boolean(customOn)),
+          onClick: () => {
+            updateSettings({ customCharacters: !customOn })
+            resetCustomImageCache()
+            toast(
+              customOn
+                ? '已切回内置的自绘 Q 版形象'
+                : '已开启。如果 characters/ 里没有对应图片，会把报错留在控制台（这是正常的）',
+              { kind: 'info', ms: 4000 }
+            )
+            ctx.refresh()
+          }
+        }, customOn ? '使用 characters/ 里的图片' : '使用内置自绘形象'),
+        el('button', {
+          class: 'btn btn--sm btn--ghost',
+          type: 'button',
+          onClick: () => customCharacterDialog()
+        }, '怎么替换？')
+      ]))
     ])
   )
   return card.node
+}
+
+/** 说明怎样换成自己的角色图 */
+function customCharacterDialog() {
+  openModal({
+    title: '换成你自己的角色图片',
+    body: el('div', { class: 'stack', style: { fontSize: '0.875rem', lineHeight: '1.8' } }, [
+      el('div', {}, '1. 准备三张背景透明的 PNG，建议宽高比 4:5（例如 400×500）。'),
+      el('div', {}, '2. 命名为 hoshino.png（星野）、arona.png（阿洛娜）、plana.png（普拉娜）。'),
+      el('div', {}, '3. 放进项目的 public/characters/ 目录。'),
+      el('div', {}, '4. 跑一次「一键上线.bat」重新部署。'),
+      el('div', {}, '5. 回到这里，把上面的开关切到「使用 characters/ 里的图片」。'),
+      el('div', { class: 'card card--flat', style: { padding: '0.75rem 0.875rem' } }, [
+        el('div', { style: { fontWeight: '700' } }, '为什么默认不开？'),
+        el('div', {}, '因为请求一个不存在的文件，浏览器一定会在控制台留下 404 记录，前端没法让它静默。' +
+          '默认关掉，没放图的人就完全不会产生多余请求。'),
+        el('div', { style: { marginTop: '0.4rem' } },
+          '另外请注意：图片会随网站一起发布到公网，请确认你有权使用它。本站为个人非商业用途。')
+      ])
+    ]),
+    actions: [{ label: '知道了', kind: 'primary' }]
+  })
 }
 
 /* ---------------- AI 接口 ---------------- */
