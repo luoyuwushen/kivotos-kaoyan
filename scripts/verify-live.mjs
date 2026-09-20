@@ -1,15 +1,21 @@
 /**
  * 线上站点验证：种入确定的数据 → 检查渲染 → 截图。
- * 与 smoke.mjs 的区别：用 goto('about:blank') 强制落地，避免同 URL reload 被跳过。
+ * 与 smoke.mjs 的区别：用 addInitScript 在建页面前就写入数据，避免时序问题。
  *
  *   node scripts/verify-live.mjs
+ *
+ * 截图默认写到系统临时目录，不污染工作区。
+ * 想指定目录：设置环境变量 OUT。
  */
 
 import { chromium } from 'playwright'
 import { mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const BASE = process.env.TARGET || 'https://luoyuwushen.github.io/kivotos-kaoyan/'
-const OUT = process.env.OUT || 'live-verify'
+// 默认落在系统临时目录：这些图只是验证产物，不该出现在项目里
+const OUT = process.env.OUT || join(tmpdir(), 'kaoyan-verify-live')
 const KEY = 'kivotos-kaoyan-v1'
 
 const seed = {

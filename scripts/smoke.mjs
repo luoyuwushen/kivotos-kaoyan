@@ -7,13 +7,18 @@
  *
  * 它会往浏览器里塞一份示例数据，这样截图里能看到"用过一阵子"的样子，
  * 而不是空空如也的初始状态。
+ *
+ * 截图默认写到**系统临时目录**，跑完不会在工作区留下任何文件。
+ * 想指定目录（例如要归档到 docs/screenshots）：设置环境变量 SMOKE_OUT。
  */
 
 import { chromium } from 'playwright'
 import { mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const BASE = process.env.SMOKE_URL || 'http://127.0.0.1:4173/'
-const OUT = process.env.SMOKE_OUT || 'smoke-shots'
+const OUT = process.env.SMOKE_OUT || join(tmpdir(), 'kaoyan-smoke')
 const STORAGE_KEY = 'kivotos-kaoyan-v1'
 
 const VIEWS = ['home', 'quests', 'plan', 'focus', 'mistakes', 'goals', 'medals', 'settings']
