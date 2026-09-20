@@ -288,6 +288,17 @@ node scripts/ba-recon.mjs        # 设计调研：用真实浏览器打开官方
 
 **改配色请改 `DESIGN.md` 第 2 节的 token，不要直接在组件里写颜色** —— `audit-design.mjs` 会拦下来。
 
+**上线后验证线上站点**（确认发出去的确实是本地验证过的那套）：
+
+```bash
+npm run verify:live         # 运行时：无控制台报错 / 无 404 / 无横向溢出 / 无异常弹窗
+npm run verify:live:design  # 设计落地：逐条断言天空面板、2px 边框、三层叠边、压扁光环、
+                            # 身份色、深色模式、手机端导航等 42 项（当前 42/42 通过）
+```
+
+> 运行时不出错 ≠ 样式上对了。上一版就出现过「白字落在浅色天空上、对比度只有 1.35:1」
+> 这种不报错、但根本看不清的问题，所以 `verify:live:design` 会把 DESIGN.md 的关键 Token 逐条断言一遍。
+
 **技术栈**：Vite + 原生 JavaScript ES Modules + 原生 CSS。
 打包产物零第三方运行时依赖，gzip 后约 41 KB。
 
