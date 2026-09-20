@@ -52,12 +52,33 @@
 ### P2 — 加分项
 - [x] AI API 自定义配置：生成阶段计划、从目录推断章节时长（可选，不配置也能用）
 - [x] 错题本 / 知识点清单 + 掌握程度
-- [x] 多设备同步：JSON 文件导入导出 + 可选 GitHub Gist 同步
+- [x] 多设备同步：JSON 文件导入导出（手动，**已完成**）
+- [ ] **可选 GitHub Gist 自动同步**（未实现）
+      —— 现状：`state.settings.sync = { gistToken, gistId }` 两个字段已预留，但**没有任何读写逻辑**。
+      设计与可直接复制的代码见 [`docs/后端与多用户方案.md`](docs/后端与多用户方案.md) 路径 1。
 - [x] 深色模式
 - [x] 键盘快捷键 / 命令面板
+- [x] 自定义角色图（放在 `public/characters/*.png`，由设置里的开关启用）
+
+## 已完成 / 待完成 一览
+
+**已完成（可验收）**：倒计时、每日委托、阶段排期、教材目录导入、番茄钟与热力图、
+错题本、目标看板、勋章与等级、星野台词、三角色挂件、AI 接口接入、深色模式、
+快捷键与命令面板、JSON 备份与恢复、三端适配、GitHub Pages 自动部署。
+
+**待完成 / 待你处理**：
+
+| 项 | 说明 | 优先级 |
+|----|------|--------|
+| 初试日期校准 | 默认 2027-12-26 是估算值，教育部通知后需在设置里改正 | 高 |
+| 定期备份 | 数据只在本地浏览器，建议每周导出一次 JSON | 高 |
+| 自定义角色图 | 想换成自己的 Q 版图，需放图片 + 开开关 | 中 |
+| GitHub Gist 自动同步 | 设计已完成、代码未写，能覆盖「手机 ↔ 电脑」 | 中 |
+| 真后端（多用户） | 仅当想给同学各自使用时才需要，方案见文档 | 低 |
 
 ## 非目标（明确不做）
 - ❌ 不做后端服务、不做账号系统、不存任何用户隐私数据到服务器。
+      （例外：若将来接入 Supabase，数据存在你自己的 Supabase 项目里，且靠行级安全隔离到每个用户——见 `docs/后端与多用户方案.md`）
 - ❌ 不做社交、不做排行榜、不做聊天。
 - ❌ 不接入付费服务；所有可选联网功能都可用免费方案实现。
 - ❌ 不使用官方游戏素材、不热链第三方图片（见 DESIGN.md 版权护栏）。
@@ -66,25 +87,29 @@
 - **构建**：Vite（开发热更新 / 生产打包成静态文件）
 - **运行时**：原生 JavaScript ES Modules + 原生 CSS（无 React/Vue，降低小白的理解与维护成本）
 - **依赖**：仅 `vite` 一个开发依赖，打包产物零第三方运行时依赖
-- **存储**：localStorage（单机）+ JSON 文件（迁移）+ 可选 Git Gist（跨设备）
-- **部署**：GitHub Pages（免费，静态，自带 HTTPS）
+- **存储**：localStorage（单机）+ JSON 文件（迁移）
+- **部署**：GitHub Pages，`main` 放源码、`gh-pages` 放构建成品，Source 选 `gh-pages` 分支
 
-## 数据模型（localStorage key: `ba-kaoyan-v1`）
+## 数据模型（localStorage key: `kivotos-kaoyan-v1`）
 ```js
 {
   version: 1,
-  profile:   { nickname, targetSchool, targetMajor, examDate, subjects[], siteName },
-  quests:    [ { id, date, title, subject, estMin, done, doneAt, source, chapterId } ],
-  phases:    [ { id, name, start, end, goal, color } ],
-  chapters:  [ { id, subject, book, title, hours, done, order } ],
+  profile:   { nickname, siteName, targetSchool, targetMajor, examDate, subjectSet, dailyGoalMin },
+  quests:    [ { id, date, title, subject, estMin, done, doneAt, source, chapterId, createdAt } ],
+  phases:    [ { id, name, start, end, goal, color, days } ],
+  chapters:  [ { id, subject, book, title, hours, done, order, createdAt } ],
   focus:     [ { id, start, end, minutes, mode, subject, questId } ],
-  mistakes:  [ { id, subject, topic, note, level, rounds, nextReview } ],
+  mistakes:  [ { id, subject, topic, note, level, rounds, createdAt, lastReview, nextReview } ],
   goals:     [ { subject, target, current, full } ],
-  scores:    [ { year, school, major, total, lines{}, note } ],
-  medals:    { unlocked: { id: at }, streak, bestStreak, exp, level },
-  settings:  { theme, mascots, aiApi, gist, speechEnabled }
+  scores:    [ { id, year, school, major, total, lines{}, note } ],
+  progress:  { streak, bestStreak, lastCheckIn, exp, level },
+  medals:    { unlocked: { [id]: ISO时间 } },
+  settings:  { theme, mascots{hoshino,arona,plana,speech}, customCharacters, aiApi{baseUrl,apiKey,model,enabled}, sync{gistToken,gistId} },
+  onboarded: false
 }
 ```
+> 满分规则：数学 150 / 英语 100 / 政治 100 / 专业课 150（总分 500，不考数学 350）。
+> 满分由 `SUBJECTS[].full` 决定，不接受外部传参，避免被写错。
 
 ## 免费部署方案
 | 方案 | 费用 | 难度 | 说明 |

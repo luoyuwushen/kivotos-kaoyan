@@ -406,6 +406,7 @@ function field(label, control) {
 
 export function applyTheme(theme) {
   document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light'
+  // 浏览器地址栏配色跟着主题走，取的是 DESIGN.md 里的 --bg / --accent
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1c2b' : '#3D9BE9')
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1c2b' : '#1189f9')
 }

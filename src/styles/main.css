@@ -65,8 +65,11 @@
   /* 角色色 */
   --hoshino: #f2a0bf;
   --hoshino-deep: #d9739a;
+  --hoshino-ink: #9c3f6b; /* 13px 名字标签专用：粉要压深才过 4.5:1 */
   --arona: #5bc8f5;
+  --arona-ink: #0b6e96;
   --plana: #a9b4d8;
+  --plana-ink: #4e5c90;
 
   /* 语义 */
   --success: #14a06b;
@@ -82,6 +85,12 @@
   --glow-rgb: 167, 216, 234;
   --text-rgb: 18, 58, 92;
   --hoshino-rgb: 242, 160, 191;
+  /* 语义色与科目色的 RGB 位：组件里要调透明度时只准用这些，不准再写数值 */
+  --error-rgb: 220, 76, 106;
+  --success-rgb: 20, 160, 107;
+  --warning-rgb: 209, 138, 12;
+  --english-rgb: 91, 200, 245;
+  --major-rgb: 169, 180, 216;
 
   /* 玻璃 */
   --glass: rgba(255, 255, 255, 0.78);
@@ -157,7 +166,6 @@
   --text-rgb: 232, 242, 251;
   --accent-ink-rgb: 6, 30, 55;
   --glow-rgb: 26, 74, 116;
-
   --paper: #16273a;
   --paper-warm: #2a3446;
 
@@ -872,7 +880,7 @@ canvas {
   background: transparent;
 }
 .btn--danger:hover {
-  background: rgba(220, 76, 106, 0.12);
+  background: rgba(var(--error-rgb), 0.12);
   border-color: transparent;
   color: var(--error);
 }
@@ -895,7 +903,7 @@ canvas {
   color: var(--accent-deep);
 }
 .tag--english {
-  background: rgba(91, 200, 245, 0.22);
+  background: rgba(var(--english-rgb), 0.22);
   color: #0b6e96;
 }
 .tag--politics {
@@ -903,19 +911,19 @@ canvas {
   color: var(--hoshino-deep);
 }
 .tag--major {
-  background: rgba(169, 180, 216, 0.3);
+  background: rgba(var(--major-rgb), 0.3);
   color: #4e5c90;
 }
 .tag--done {
-  background: rgba(20, 160, 107, 0.16);
+  background: rgba(var(--success-rgb), 0.16);
   color: var(--success);
 }
 .tag--warn {
-  background: rgba(209, 138, 12, 0.18);
+  background: rgba(var(--warning-rgb), 0.18);
   color: var(--warning);
 }
 .tag--error {
-  background: rgba(220, 76, 106, 0.16);
+  background: rgba(var(--error-rgb), 0.16);
   color: var(--error);
 }
 /* 浮在天空面板上的标签 */
@@ -1082,7 +1090,7 @@ canvas {
   z-index: -1;
   /* 天光只压在右下角（云那一侧），上 3/4 保持深色，白字才站得住 */
   background: radial-gradient(85% 55% at 88% 100%, rgba(var(--surface-rgb), 0.8) 0%, transparent 62%),
-    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 34%, var(--sky-3) 58%, var(--sky-4) 82%, #e8f4fd 100%);
+    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 34%, var(--sky-3) 58%, var(--sky-4) 82%, var(--bg) 100%);
 }
 
 .sky-panel::after {
@@ -1297,8 +1305,7 @@ canvas {
   );
   mask: radial-gradient(closest-side, transparent 74%, #000 77%, #000 96%, transparent 100%);
   filter: drop-shadow(0 0 7px rgba(var(--surface-rgb), 0.9))
-    drop-shadow(0 0 20px rgba(84, 220, 254, 0.75));
-  animation: halo-turn 44s linear infinite;
+    drop-shadow(0 0 20px rgba(84, 220, 254, 0.75));  animation: halo-turn 44s linear infinite;
 }
 
 .halo--2 {
@@ -1421,11 +1428,11 @@ canvas {
   --speech-who: #9c3f6b;
 }
 .speech--arona {
-  border-color: rgba(91, 200, 245, 0.55);
+  border-color: rgba(var(--english-rgb), 0.55);
   --speech-who: #0b6e96;
 }
 .speech--plana {
-  border-color: rgba(169, 180, 216, 0.6);
+  border-color: rgba(var(--major-rgb), 0.6);
   --speech-who: #4e5c90;
 }
 
@@ -1580,7 +1587,7 @@ canvas {
 }
 
 .quest[data-overdue='true'] {
-  border-color: rgba(220, 76, 106, 0.4);
+  border-color: rgba(var(--error-rgb), 0.4);
 }
 
 .quest__tools {
@@ -1620,7 +1627,7 @@ canvas {
 }
 
 .icon-btn--danger:hover {
-  background: rgba(220, 76, 106, 0.14);
+  background: rgba(var(--error-rgb), 0.14);
   color: var(--error);
 }
 
@@ -2526,6 +2533,7 @@ canvas {
   }
 
   .halo,
+  .halo::before,
   .bg-ray,
   .bg-cloud,
   .bg-layer__spark,
