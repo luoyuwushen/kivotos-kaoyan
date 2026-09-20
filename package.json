@@ -10,7 +10,8 @@
     "preview": "vite preview --port 4173",
     "init-deps": "npm install && npx playwright install chromium",
     "smoke": "node scripts/smoke.mjs",
-    "test": "node scripts/interact.mjs"
+    "test": "node scripts/interact.mjs",
+    "test:scores": "node scripts/test-scores.mjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0",
