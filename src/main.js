@@ -8,7 +8,7 @@ import { el, mount, toDateKey, examCountdown } from './lib/utils.js'
 import { state, subscribe, commit, stats, overdueCount, dueMistakes, rolloverOverdue, generatePhases, updateProfile } from './lib/store.js'
 import { icon, brandMark } from './components/icons.js'
 import { toast, enableSpotlight, observeReveals, openModal, REDUCED } from './components/ui.js'
-import { footer, footerBlock } from './components/footer.js'
+import { appFooter } from './components/footer.js'
 import { buildSnapshot, findNewlyUnlocked } from './data/medals.js'
 
 import { renderHome } from './views/home.js'
@@ -57,8 +57,31 @@ function makeCtx() {
 
 /* ---------------- 背景氛围 ---------------- */
 
+/**
+ * 天空层。视觉基准是官方站那片天：天色渐变 + 斜射光柱 + 页脚云带 + 细网格。
+ * 全部是纯 CSS 图形，不含任何取自官方站的图片或纹理。
+ */
 function buildBackground() {
   const layer = el('div', { class: 'bg-layer', 'aria-hidden': 'true' })
+
+  layer.append(
+    el('div', { class: 'bg-sky' }),
+    el('div', { class: 'bg-bloom bg-bloom--sun' }),
+    el('div', { class: 'bg-bloom bg-bloom--far' })
+  )
+
+  // 光柱：由左上斜射下来，只呼吸 opacity（零 blur、零重排）
+  const raySpots = [
+    { left: '8%', cls: 'bg-ray' },
+    { left: '38%', cls: 'bg-ray bg-ray--2' },
+    { left: '72%', cls: 'bg-ray bg-ray--3' }
+  ]
+  for (const ray of raySpots) {
+    layer.append(el('div', { class: ray.cls, style: { left: ray.left } }))
+  }
+
+  layer.append(el('div', { class: 'bg-hatch' }), el('div', { class: 'bg-cloud' }))
+
   const COUNT = 14
   for (let i = 0; i < COUNT; i++) {
     const size = 5 + ((i * 37) % 22)
@@ -113,12 +136,13 @@ function buildShell() {
       )
     )
   }
-  sidenav.append(tabbar, footer())
+  sidenav.append(tabbar)
 
   const main = el('main', { class: 'main', id: 'main', tabindex: '-1' })
   const shell = el('div', { class: 'shell' }, [sidenav, main])
+  const shellWrap = el('div', { class: 'app' }, [shell, appFooter()])
 
-  mount(app, buildBackground(), shell)
+  mount(app, buildBackground(), shellWrap)
 
   // 品牌区在启动时只建一次，所以要单独跟着数据更新，
   // 否则改了「称呼 / 站点名称」侧栏不会变。
@@ -166,9 +190,6 @@ function render() {
   const ctx = makeCtx()
   const view = entry.render(ctx)
 
-  // 手机上正文结尾带上声明
-  if (window.matchMedia('(max-width: 640px)').matches) view.append(footerBlock())
-
   mount(mainNode, view)
   updateNav()
   observeReveals(mainNode)
@@ -211,16 +232,22 @@ function checkMedals() {
   }
   commit('medals:unlock')
 
-  unannounced.slice(0, 3).forEach((medal, i) => {
+  // 最多弹 2 条，其余合并成一条汇总，避免一次堆一大片挡住页面内容
+  const HEAD = 2
+  unannounced.slice(0, HEAD).forEach((medal, i) => {
     setTimeout(() => {
       toast(`解锁勋章 · ${medal.name}`, { kind: 'medal', ms: 4200, iconName: 'medal' })
       celebrate()
     }, i * 420)
   })
-  if (unannounced.length > 3) {
+  if (unannounced.length > HEAD) {
     setTimeout(() => {
-      toast(`还有 ${unannounced.length - 3} 枚勋章解锁了，去勋章墙看看`, { kind: 'medal', ms: 4200 })
-    }, 1320)
+      toast(`还有 ${unannounced.length - HEAD} 枚勋章也解锁了，去勋章墙看看`, {
+        kind: 'medal',
+        ms: 4200,
+        iconName: 'medal'
+      })
+    }, HEAD * 420)
   }
 }
 

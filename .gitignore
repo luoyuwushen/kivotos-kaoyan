@@ -7,7 +7,12 @@ dist/
 smoke-shots/
 local-shots/
 live-shots/
+live-final/
+live-verify/
 *-shots/
+
+# 设计调研资料（从官网抓的原始素材，几十 MB，只作本地参考，不进仓库也不部署）
+_ba_research/
 
 # 编辑器与系统
 .vscode/

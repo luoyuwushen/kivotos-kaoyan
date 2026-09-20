@@ -301,10 +301,10 @@ export function resetCustomImageCache() {
  * 只有在设置里开启了自定义形象、且 public/characters/<id>.png 确实存在时，
  * 才会换成那张图；否则一律使用内置的自绘 SVG。
  */
-export function mascot(id, { size = 104, float = true } = {}) {
+export function mascot(id, { size = 104, float = true, className = '' } = {}) {
   const char = characterById(id)
   const wrap = document.createElement('div')
-  wrap.className = `mascot mascot--${id}${float ? ' mascot--float' : ''}`
+  wrap.className = `mascot mascot--${id}${float ? ' mascot--float' : ''}${className ? ` ${className}` : ''}`
   wrap.style.setProperty('--mascot-size', `${size}px`)
 
   const svgNode = char.svg()

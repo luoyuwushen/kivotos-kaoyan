@@ -35,14 +35,35 @@ import {
 
 let speechTurn = 0
 
+/**
+ * 光环：两层反向旋转，垫在倒计时数字背后。
+ * 官方的环不是套住整个数字的大环，而是被透视压扁的小圆环，尺寸约等于两行数字高。
+ * 压扁交给容器（skew + scaleY），旋转交给 ::before，两者互不干扰。
+ */
+const HALO_SIZE = 190
+
+function haloAt(scale, extraClass) {
+  return el('div', {
+    class: `halo${extraClass}`,
+    style: {
+      width: `${HALO_SIZE * scale}px`,
+      height: `${HALO_SIZE * scale}px`,
+      left: '22%',
+      top: '46%',
+      marginLeft: `${-HALO_SIZE * scale * 0.5}px`,
+      marginTop: `${-HALO_SIZE * scale * 0.5}px`
+    }
+  })
+}
+
 export function renderHome(ctx) {
-  const wrap = el('div', { class: 'stack', style: { gap: 'clamp(1rem, 2.5vw, 1.5rem)' } })
+  const wrap = el('div', { class: 'stack', style: { gap: 'clamp(0.875rem, 2.2vw, 1.25rem)' } })
   const cd = examCountdown(state.profile.examDate)
   const s = stats()
   const today = todayKey()
 
-  /* --- Hero：倒计时 --- */
-  const hero = el('section', { class: 'hero rise' }, [
+  /* --- Hero：天空面板。上半是天顶（深，白字），下半是地平线（浅，深色字） --- */
+  const hero = el('section', { class: 'sky-panel hero rise' }, [
     el('div', { class: 'countdown' }, [
       el('div', { class: 'countdown__label' }, `距 28 考研初试（${formatDateCN(state.profile.examDate, false)}）还有`),
       el('div', { class: 'countdown__num num' }, [
@@ -53,45 +74,17 @@ export function renderHome(ctx) {
         el('span', {}, cd.remainWeeksText),
         el('span', {}, `已走过 ${Math.max(0, 100 - Math.round((cd.days / 460) * 100))}%`),
         el('span', { class: 'countdown__phase' }, phaseText())
-      ])
+      ]),
+      // 光环挂在 countdown 里（countdown 自成层叠上下文），才压得住天色、又垫在数字后面
+      haloAt(1, ''),
+      haloAt(0.68, ' halo--2')
     ]),
     el('div', { class: 'hero__side' }, [
-      state.settings.mascots.hoshino ? mascot('hoshino', { size: 132 }) : null,
-      el('div', { class: 'tag tag--math' }, `Lv.${state.progress.level} ${state.profile.nickname || 'Sensei'}`)
-    ])
+      state.settings.mascots.arona ? mascot('arona', { size: 168, className: 'mascot--hero' }) : null,
+      el('div', { class: 'tag tag--on-sky' }, `Lv.${state.progress.level} ${state.profile.nickname || 'Sensei'}`)
+    ]),
+    statusBar(ctx, cd, s)
   ])
-
-  // 光环：两层反向旋转，放在倒计时背后（挂在 hero 上，绝对定位）
-  hero.style.position = 'relative'
-  hero.style.isolation = 'isolate'
-  hero.style.overflow = 'hidden'
-  const haloSize = 320
-  hero.prepend(
-    el('div', {
-      class: 'halo',
-      style: {
-        width: `${haloSize}px`,
-        height: `${haloSize}px`,
-        position: 'absolute',
-        left: '18%',
-        top: '50%',
-        marginLeft: `${-haloSize / 2}px`,
-        marginTop: `${-haloSize / 2}px`
-      }
-    }),
-    el('div', {
-      class: 'halo halo--2',
-      style: {
-        width: `${haloSize * 0.7}px`,
-        height: `${haloSize * 0.7}px`,
-        position: 'absolute',
-        left: '18%',
-        top: '50%',
-        marginLeft: `${-haloSize * 0.35}px`,
-        marginTop: `${-haloSize * 0.35}px`
-      }
-    })
-  )
 
   wrap.append(hero)
   startCountdownTicker(hero)
@@ -123,13 +116,40 @@ export function renderHome(ctx) {
   return wrap
 }
 
+/* ---------------- 作战状态条 ---------------- */
+
+/** 把"现在处于什么状态"压成一行：阶段 / 剩余天数 / 今日完成 / 连续天数 */
+function statusBar(ctx, cd, s) {
+  const phase = currentPhase()
+  const pp = phase ? phaseProgress(phase) : null
+  const due = s.todayQuests
+  const doneCount = due.filter((q) => q.done).length
+
+  const item = (label, value, unit) =>
+    el('span', { class: 'strapbar__item' }, [
+      el('span', { class: 'dim-2' }, label),
+      el('strong', {}, value),
+      unit ? el('span', { class: 'dim-2' }, unit) : null
+    ])
+
+  return el('div', { class: 'strapbar' }, [
+    el('span', { class: 'strapbar__dot' }),
+    item('当前阶段', phase ? phase.name : '未排期', pp ? `· ${pp.percent}%` : ''),
+    el('span', { class: 'strap' }),
+    item('距初试', String(cd.days), '天'),
+    el('span', { class: 'strap' }),
+    item('今日委托', `${doneCount}/${due.length}`),
+    el('span', { class: 'strap' }),
+    item('连续', String(s.streak), '天')
+  ])
+}
+
 function phaseText() {
   const phase = currentPhase()
   return phase ? `当前阶段：${phase.name}` : '还没有阶段计划'
 }
 
 /* ---------------- 倒计时跳秒 ---------------- */
-
 let tickerHandle = null
 
 function startCountdownTicker(hero) {
@@ -204,7 +224,7 @@ function questCard(ctx, today, s) {
   const doneCount = list.filter((q) => q.done).length
   const overdue = overdueCount()
 
-  const card = el('section', { class: 'card card--spot span-4 rise', dataset: { reveal: '' } })
+  const card = el('section', { class: 'card card--spot span-4 tone-quest rise', dataset: { reveal: '' } })
   card.append(
     el('div', { class: 'card__head' }, [
       el('h2', { class: 'section-title' }, '今日委托'),
@@ -376,7 +396,7 @@ export function editQuestDialog(quest, ctx) {
 
 function phaseCard(ctx) {
   const phase = currentPhase()
-  const card = el('section', { class: 'card card--spot span-2 rise', dataset: { reveal: '' } })
+  const card = el('section', { class: 'card card--spot span-2 tone-phase rise', dataset: { reveal: '' } })
   card.append(
     el('div', { class: 'card__head' }, [
       el('h2', { class: 'section-title' }, '阶段'),
@@ -405,7 +425,7 @@ function phaseCard(ctx) {
 /* ---------------- 专注卡 ---------------- */
 
 function focusCard(ctx, s) {
-  const card = el('section', { class: 'card card--spot span-3 rise', dataset: { reveal: '' } })
+  const card = el('section', { class: 'card card--spot span-3 tone-focus rise', dataset: { reveal: '' } })
   const goalMin = state.profile.dailyGoalMin || 360
   const percent = Math.min((s.todayMinutes / goalMin) * 100, 100)
   card.append(
@@ -441,7 +461,7 @@ function focusCard(ctx, s) {
 /* ---------------- 目标卡 ---------------- */
 
 function goalCard(ctx) {
-  const card = el('section', { class: 'card card--spot span-3 rise', dataset: { reveal: '' } })
+  const card = el('section', { class: 'card card--spot span-3 tone-goal rise', dataset: { reveal: '' } })
   const summary = goalSummary()
   card.append(
     el('div', { class: 'card__head' }, [
@@ -482,7 +502,7 @@ function recentMedals(ctx) {
     .filter(Boolean)
   if (!latest.length) return null
 
-  const card = el('section', { class: 'card card--flat rise', dataset: { reveal: '' } })
+  const card = el('section', { class: 'card card--flat tone-medal rise', dataset: { reveal: '' } })
   card.append(
     el('div', { class: 'card__head' }, [
       el('h2', { class: 'section-title' }, '最近获得的勋章'),

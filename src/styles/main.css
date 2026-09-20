@@ -1,32 +1,62 @@
 /* =========================================================================
    基沃托斯作战本部 · 样式表
    Token 全部来自 DESIGN.md，组件中不出现硬编码配色。
+
+   本版视觉基准：官方站那一片天空（见 DESIGN.md「设计依据」）。
+   三条主线：
+     1) 底部铺一层薄天空 + 斜射光柱 + 页脚云带 —— 让白底不再是一片死白
+     2) 首页 Hero 升格为整页唯一的天空面板，倒计时用巨型纯白数字 + 压扁的光环
+     3) 每类卡片有身份色竖条与三层叠边 —— 打破上一版的均质表格感
    ========================================================================= */
+
+/* 数字字形：官方站的大数字走几何无衬线，Poppins 是最接近的免费替代。
+   断网时自动回退到系统字形，不影响任何功能。 */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&display=swap');
 
 /* ---------------- 1. Tokens ---------------- */
 
 :root {
-  /* Backgrounds */
-  --bg: #f2f7fc;
+  /* 天空分层：面板上半是"天顶"，下半化到"地平线"的浅色。
+     深色的那一半才敢放白字——对比度审计把天顶压到了这个深度。 */
+  --sky-1: #2b6fb4;
+  --sky-2: #4795d8;
+  --sky-3: #82c3ef;
+  --sky-4: #cfe8fa;
+  --bg: #f4f9fe;
+  --cloud: rgba(255, 255, 255, 0.9);
+
+  /* 表面 */
   --surface: #ffffff;
-  --surface-alt: #e9f2fb;
-  --surface-hover: #f5faff;
+  --surface-alt: #e4f1fc;
+  --surface-hover: #f7fbff;
+  --surface-sunken: #dcebf9;
 
-  /* Borders */
-  --border: #c9ddf0;
-  --border-strong: #9fc4e4;
-  --border-hover: #5ab0ee;
+  /* 半透明面板 */
+  --panel-glass: rgba(255, 255, 255, 0.82);
 
-  /* Text */
+  /* 边框：一律带蓝调，且比上一版更实 */
+  --border: #afd3ef;
+  --border-strong: #7fb8e4;
+  --border-hover: #1189f9;
+
+  /* 文字 */
   --text: #123a5c;
-  --text-secondary: #44688a;
-  --text-tertiary: #8aa6bf;
+  --text-secondary: #3f6b90;
+  /* 13px 以下的小字要 4.5:1，上一版的 #7c9cbb 在浅底上只有 2.7:1，压深 */
+  --text-tertiary: #5c7d9d;
+  /* 页脚专用：比 tertiary 再深一档，保证 12px 小字也过 AA */
+  --text-foot: #4a6b8c;
 
-  /* Accent */
-  --accent: #3d9be9;
-  --accent-deep: #1e6fb8;
-  --accent-soft: #cbe6fb;
-  --accent-hover: #2e8bd9;
+  /* 强调色：官方站 #1189F9 起手 */
+  --accent: #1189f9;
+  --accent-deep: #0a63be;
+  --accent-soft: #d3e9fe;
+  --accent-hover: #21bbff;
+  --accent-sky: #54dcfe;
+  --accent-ink: #0a3d6b;
+  --glow: #a7d8ea; /* 官方站 CSS 里那个真实的"光晕冰蓝"，全站辉光都用它 */
+  --paper: #f8f8f8; /* 次级面板纸面 */
+  --paper-warm: #dfdcce; /* 委托单那种票据纸 */
 
   /* 角色色 */
   --hoshino: #f2a0bf;
@@ -34,53 +64,77 @@
   --arona: #5bc8f5;
   --plana: #a9b4d8;
 
-  /* Semantic */
-  --success: #35b37e;
-  --warning: #efa82b;
-  --error: #e2607a;
+  /* 语义 */
+  --success: #14a06b;
+  --warning: #d18a0c;
+  --error: #dc4c6a;
   --star: #ffc93c;
 
   /* RGB 辅助值 */
-  --bg-rgb: 242, 247, 252;
+  --bg-rgb: 244, 249, 254;
   --surface-rgb: 255, 255, 255;
-  --accent-rgb: 61, 155, 233;
+  --accent-rgb: 17, 137, 249;
+  --accent-ink-rgb: 10, 61, 107;
+  --glow-rgb: 167, 216, 234;
   --text-rgb: 18, 58, 92;
   --hoshino-rgb: 242, 160, 191;
 
   /* 玻璃 */
   --glass: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.9);
 
   /* 字体 */
   --font-display: 'Baloo 2', 'M PLUS Rounded 1c', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans',
     'Microsoft YaHei UI', sans-serif;
   --font-body: 'M PLUS Rounded 1c', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans',
     'Microsoft YaHei UI', sans-serif;
-  --font-num: 'Baloo 2', 'M PLUS Rounded 1c', system-ui, sans-serif;
+  --font-num: 'Poppins', 'Baloo 2', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Consolas, monospace;
 
-  /* 圆角与间距 */
+  /* 圆角：收敛成四档，对齐官方站 7.5 / 11.25 / 18 / 37.5 的口径 */
   --r-sm: 10px;
   --r-md: 14px;
   --r-lg: 18px;
-  --r-xl: 26px;
+  --r-xl: 28px;
   --gap: 1rem;
   --pad-card: 1.125rem 1.25rem;
 
-  /* 阴影：永远带蓝调，禁止中性灰 */
-  --sh-subtle: 0 2px 8px rgba(var(--text-rgb), 0.05);
-  --sh-elevated: 0 8px 24px rgba(var(--accent-rgb), 0.13);
-  --sh-pressed: 0 4px 0 var(--accent-deep);
+  /* 阴影：一律带蓝调，禁止中性灰。
+     官方站 CSS 里的真实阴影是"宽、软、蓝"，辉光色是 --glow；
+     --frame 复刻官方站那套三层叠边（内发丝 + 内白高光 + 外辉光）。 */
+  --sh-subtle: 0 2px 10px rgba(var(--glow-rgb), 0.45);
+  --sh-elevated: 0 4px 18px rgba(var(--glow-rgb), 0.7);
+  --sh-sky: 0 12px 34px -6px rgba(var(--glow-rgb), 0.85);
+  --frame: inset 0 0 0 1.5px rgba(var(--accent-rgb), 0.2), inset 0 1px 0 rgba(var(--surface-rgb), 1),
+    0 6px 22px rgba(var(--glow-rgb), 0.5);
+  --glow-active: 0 0 8px rgba(var(--accent-rgb), 0.46);
+  --glow-cyan: 0 0 12px rgba(84, 220, 254, 0.55);
+  --sh-pressed: 0 3px 0 var(--accent-deep), 0 6px 16px rgba(var(--accent-rgb), 0.35);
 
-  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 动效时长：对齐官方站实测的 .3 / .5 / 1s ease + 3s 呼吸 */
+  --t-fast: 0.3s;
+  --t-mid: 0.5s;
+  --t-slow: 1s;
+  --t-float: 3s;
+
+  --ease-pop: ease;
+  --ease-out: ease-out;
 }
 
 :root[data-theme='dark'] {
+  --sky-1: #0b2d4d;
+  --sky-2: #0a2440;
+  --sky-3: #0c1f36;
+  --sky-4: #0f1c2b;
+  --cloud: rgba(120, 175, 225, 0.18);
+
   --bg: #0f1c2b;
   --surface: #17293c;
   --surface-alt: #1e344a;
   --surface-hover: #1f3852;
+  --surface-sunken: #14263a;
+
+  --panel-glass: rgba(23, 41, 60, 0.82);
 
   --border: #2c4a68;
   --border-strong: #3d6a92;
@@ -97,9 +151,17 @@
   --bg-rgb: 15, 28, 43;
   --surface-rgb: 23, 41, 60;
   --text-rgb: 232, 242, 251;
+  --accent-ink-rgb: 6, 30, 55;
+  --glow-rgb: 26, 74, 116;
 
-  --sh-subtle: 0 2px 8px rgba(0, 0, 0, 0.25);
-  --sh-elevated: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --paper: #16273a;
+  --paper-warm: #2a3446;
+
+  --sh-subtle: 0 2px 10px rgba(0, 0, 0, 0.3);
+  --sh-elevated: 0 4px 18px rgba(0, 0, 0, 0.45);
+  --sh-sky: 0 12px 34px -6px rgba(0, 0, 0, 0.6);
+  --frame: inset 0 0 0 1.5px rgba(var(--surface-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 6px 22px rgba(0, 0, 0, 0.35);
 }
 
 /* ---------------- 2. Reset & 基底 ---------------- */
@@ -170,6 +232,11 @@ canvas {
   border-radius: 4px;
 }
 
+/* 天空面板里的焦点环要换成白色，否则蓝底上看不见 */
+.sky-panel :focus-visible {
+  outline-color: var(--surface);
+}
+
 [hidden] {
   display: none !important;
 }
@@ -185,6 +252,7 @@ canvas {
   border-radius: 0 0 var(--r-md) 0;
   font-weight: 700;
 }
+
 .skip-link:focus {
   left: 0;
 }
@@ -202,11 +270,25 @@ canvas {
 .dim {
   color: var(--text-secondary);
 }
+
 .dim-2 {
   color: var(--text-tertiary);
 }
 
-/* ---------------- 3. 背景氛围层 ---------------- */
+/* 屏幕阅读器专用 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------- 3. 天空氛围层（本版的视觉主线） ---------------- */
 
 .bg-layer {
   position: fixed;
@@ -216,7 +298,126 @@ canvas {
   overflow: hidden;
 }
 
-/* 光点：用 transform 漂浮，不用 blur，零 GPU 压力 */
+/* ① 天色本身：天顶蓝 → 地平线近白。用固定层，滚动时天色不动，像真的天 */
+.bg-sky {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    var(--sky-2) 0%,
+    var(--sky-3) 34%,
+    var(--sky-4) 62%,
+    var(--bg) 100%
+  );
+}
+
+/* ② 左上角天光 + 右上角次级光斑：给平色层一点呼吸 */
+.bg-bloom {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.bg-bloom--sun {
+  top: -34vh;
+  left: -14vw;
+  width: 78vw;
+  height: 78vw;
+  background: radial-gradient(circle, rgba(var(--surface-rgb), 0.85), transparent 62%);
+}
+
+.bg-bloom--far {
+  top: -22vh;
+  right: -18vw;
+  width: 56vw;
+  height: 56vw;
+  background: radial-gradient(circle, rgba(var(--surface-rgb), 0.5), transparent 66%);
+}
+
+/* ③ 斜射光柱：纯 CSS 条纹，只呼吸 opacity，不碰滚动区，零 blur */
+.bg-ray {
+  position: absolute;
+  top: -30%;
+  height: 165%;
+  width: clamp(70px, 11vw, 180px);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--surface-rgb), 0.5) 0%,
+    rgba(var(--surface-rgb), 0.16) 46%,
+    transparent 80%
+  );
+  transform: rotate(16deg);
+  transform-origin: top center;
+  opacity: 0.45;
+  animation: ray-breathe 11s ease-in-out infinite;
+}
+
+.bg-ray--2 {
+  animation-delay: -4s;
+  animation-duration: 14s;
+  opacity: 0.3;
+}
+
+.bg-ray--3 {
+  animation-delay: -8s;
+  animation-duration: 17s;
+  opacity: 0.22;
+}
+
+@keyframes ray-breathe {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.62;
+  }
+}
+
+/* ④ 云带：页脚那一条发光的白雾，让页面底部"落地" */
+.bg-cloud {
+  position: absolute;
+  left: -12%;
+  right: -12%;
+  bottom: -16vh;
+  height: 44vh;
+  background: radial-gradient(
+      58% 100% at 20% 100%,
+      var(--cloud),
+      transparent 72%
+    ),
+    radial-gradient(48% 100% at 58% 100%, var(--cloud), transparent 74%),
+    radial-gradient(52% 100% at 88% 100%, var(--cloud), transparent 76%);
+  animation: cloud-drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes cloud-drift {
+  from {
+    transform: translate3d(-2.5%, 0, 0);
+  }
+  to {
+    transform: translate3d(2.5%, 0, 0);
+  }
+}
+
+/* ⑤ 细密网格纹理：日服官网画面上的那层十字网，极淡，只加质感 */
+.bg-hatch {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+      0deg,
+      rgba(var(--surface-rgb), 0.5) 0 1px,
+      transparent 1px 46px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(var(--surface-rgb), 0.5) 0 1px,
+      transparent 1px 46px
+    );
+  opacity: 0.5;
+}
+
+/* ⑥ 光点：用 transform 漂浮，不用 blur，零 GPU 压力 */
 .bg-layer__spark {
   position: absolute;
   border-radius: 50%;
@@ -232,7 +433,7 @@ canvas {
   }
   50% {
     transform: translate3d(14px, -26px, 0) scale(1.25);
-    opacity: 0.24;
+    opacity: 0.26;
   }
   100% {
     transform: translate3d(0, 0, 0) scale(1);
@@ -246,23 +447,28 @@ canvas {
   position: relative;
   z-index: 1;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .shell {
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
-  gap: clamp(1rem, 3vw, 2rem);
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: clamp(1rem, 3vw, 1.75rem);
   max-width: 1180px;
+  width: 100%;
   margin-inline: auto;
   padding: clamp(1rem, 4vw, 2rem);
+  padding-bottom: 0;
   align-items: start;
+  flex: 1;
 }
 
 .main {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: clamp(1rem, 2.5vw, 1.5rem);
+  gap: clamp(0.875rem, 2.2vw, 1.25rem);
 }
 
 /* ---------------- 5. 侧栏 / 标签栏 ---------------- */
@@ -272,10 +478,10 @@ canvas {
   top: clamp(1rem, 4vw, 2rem);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem 0.875rem;
+  gap: 0.375rem;
+  padding: 1rem 0.875rem 1.125rem;
   background: var(--surface);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--r-xl);
   box-shadow: var(--sh-subtle);
 }
@@ -285,7 +491,7 @@ canvas {
   align-items: center;
   gap: 0.625rem;
   padding: 0.25rem 0.5rem 0.875rem;
-  border-bottom: 1.5px solid var(--border);
+  border-bottom: 2px solid var(--border);
   margin-bottom: 0.375rem;
 }
 
@@ -308,7 +514,7 @@ canvas {
 
 .brand__sub {
   font-size: 0.75rem;
-  color: var(--text-tertiary);
+  color: var(--text-foot);
   line-height: 1.4;
 }
 
@@ -319,14 +525,15 @@ canvas {
   min-height: 44px;
   padding: 0.5rem 0.75rem;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--text-secondary);
   font-weight: 700;
   font-size: 0.9375rem;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease,
+    transform 0.18s var(--ease-pop);
 }
 
 .nav-item:hover {
@@ -334,9 +541,21 @@ canvas {
   color: var(--accent-deep);
 }
 
+.nav-item:active {
+  transform: scale(0.98);
+}
+
+/* 活跃态：实心蓝 + 硬投影，当前位置一眼可见 */
 .nav-item[aria-current='page'] {
-  background: var(--accent-soft);
-  color: var(--accent-deep);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 3px 0 var(--accent-deep);
+}
+
+.nav-item[aria-current='page']:hover {
+  background: var(--accent-hover);
+  color: #fff;
 }
 
 .nav-item__icon {
@@ -356,31 +575,69 @@ canvas {
   font-weight: 800;
   text-align: center;
   line-height: 20px;
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
-.sidenav__foot {
-  margin-top: auto;
-  padding: 0.875rem 0.5rem 0.25rem;
-  border-top: 1.5px solid var(--border);
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  line-height: 1.6;
+.nav-item[aria-current='page'] .nav-item__badge {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .tabbar {
   display: none;
 }
 
-/* ---------------- 6. 通用组件 ---------------- */
+/* ---------------- 6. 页脚（独立成条，压在那条云带上） ---------------- */
+
+.pagefoot {
+  position: relative;
+  z-index: 1;
+  margin-top: clamp(1.5rem, 5vw, 3rem);
+  padding: clamp(1.5rem, 4vw, 2.25rem) clamp(1rem, 4vw, 2rem) 2rem;
+}
+
+.pagefoot__inner {
+  max-width: 1180px;
+  margin-inline: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem 1.5rem;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  color: var(--text-foot);
+}
+
+.pagefoot__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.pagefoot__note {
+  max-width: 62ch;
+}
+
+.pagefoot__meta {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ---------------- 7. 通用组件 ---------------- */
 
 .card {
   position: relative;
   background: var(--surface);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--r-lg);
   padding: var(--pad-card);
-  box-shadow: var(--sh-subtle);
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  /* 官方站那套三层叠边：内发丝 + 内白高光 + 外辉光。不是硬投影 */
+  box-shadow: var(--frame);
+  transition: transform var(--t-fast) ease, border-color var(--t-fast) ease,
+    box-shadow var(--t-fast) ease;
 }
 
 .card--hover:hover {
@@ -411,8 +668,8 @@ canvas {
   border-radius: inherit;
   background: radial-gradient(
     320px circle at var(--mx, 50%) var(--my, 0%),
-    rgba(var(--accent-rgb), 0.13),
-    transparent 68%
+    rgba(var(--accent-rgb), 0.16),
+    transparent 66%
   );
   opacity: 0;
   transition: opacity 0.25s ease;
@@ -423,11 +680,26 @@ canvas {
   opacity: 1;
 }
 
+/* 卡片身份色：靠 4px 竖条区分，不靠整块换色 */
 .card__head {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 0.875rem;
+}
+
+.card__head::before {
+  content: '';
+  flex: none;
+  width: 4px;
+  align-self: stretch;
+  min-height: 22px;
+  border-radius: 999px;
+  background: var(--card-tone, var(--accent));
+}
+
+.card--flat .card__head::before {
+  background: var(--card-tone, var(--border-strong));
 }
 
 .card__title {
@@ -444,8 +716,50 @@ canvas {
 
 .section-title {
   font-family: var(--font-display);
-  font-size: clamp(1.15rem, 2vw, 1.4rem);
-  font-weight: 700;
+  font-size: clamp(1.25rem, 2.1vw, 1.55rem);
+  font-weight: 800;
+}
+
+/* 身份色：每类卡片一个色相，全部走语义变量 */
+.tone-quest {
+  --card-tone: var(--accent);
+}
+.tone-focus {
+  --card-tone: var(--arona);
+}
+.tone-goal {
+  --card-tone: var(--hoshino);
+}
+.tone-phase {
+  --card-tone: var(--plana);
+}
+.tone-medal {
+  --card-tone: var(--star);
+}
+.tone-plan {
+  --card-tone: var(--accent-deep);
+}
+
+/* 斜杠饰带：区块之间的呼吸，代替横线 */
+.strap {
+  flex: 1;
+  height: 9px;
+  min-width: 28px;
+  border-radius: 2px;
+  background-image: repeating-linear-gradient(
+    108deg,
+    var(--border-strong) 0 4px,
+    transparent 4px 12px
+  );
+  opacity: 0.85;
+}
+
+.strap--on-sky {
+  background-image: repeating-linear-gradient(
+    108deg,
+    rgba(var(--surface-rgb), 0.92) 0 4px,
+    transparent 4px 12px
+  );
 }
 
 .btn {
@@ -455,7 +769,7 @@ canvas {
   gap: 0.4rem;
   min-height: 44px;
   padding: 0 1.125rem;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
   color: var(--text);
@@ -500,6 +814,25 @@ canvas {
   transform: translateY(3px);
 }
 
+/* 浮在天空面板上的按钮 */
+.btn--on-sky {
+  background: rgba(var(--surface-rgb), 0.94);
+  border-color: transparent;
+  color: var(--accent-deep);
+  box-shadow: 0 4px 0 rgba(var(--accent-ink-rgb), 0.32);
+}
+
+.btn--on-sky:hover {
+  background: var(--surface);
+  border-color: transparent;
+  color: var(--accent-deep);
+}
+
+.btn--on-sky:active {
+  box-shadow: 0 1px 0 rgba(var(--accent-ink-rgb), 0.32);
+  transform: translateY(3px);
+}
+
 .btn--ghost {
   border-color: transparent;
   background: transparent;
@@ -513,8 +846,8 @@ canvas {
 }
 
 .btn--sm {
-  min-height: 36px;
-  padding: 0 0.75rem;
+  min-height: 38px;
+  padding: 0 0.875rem;
   font-size: 0.875rem;
 }
 
@@ -530,7 +863,7 @@ canvas {
   background: transparent;
 }
 .btn--danger:hover {
-  background: rgba(226, 96, 122, 0.12);
+  background: rgba(220, 76, 106, 0.12);
   border-color: transparent;
   color: var(--error);
 }
@@ -539,7 +872,7 @@ canvas {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.1rem 0.6rem;
+  padding: 0.1rem 0.625rem;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-deep);
@@ -549,32 +882,37 @@ canvas {
 }
 
 .tag--math {
-  background: rgba(var(--accent-rgb), 0.16);
+  background: rgba(var(--accent-rgb), 0.14);
   color: var(--accent-deep);
 }
 .tag--english {
-  background: rgba(91, 200, 245, 0.2);
-  color: #1d7fa8;
+  background: rgba(91, 200, 245, 0.22);
+  color: #0b6e96;
 }
 .tag--politics {
   background: rgba(var(--hoshino-rgb), 0.22);
   color: var(--hoshino-deep);
 }
 .tag--major {
-  background: rgba(169, 180, 216, 0.28);
-  color: #5c6a9c;
+  background: rgba(169, 180, 216, 0.3);
+  color: #4e5c90;
 }
 .tag--done {
-  background: rgba(53, 179, 126, 0.16);
+  background: rgba(20, 160, 107, 0.16);
   color: var(--success);
 }
 .tag--warn {
-  background: rgba(239, 168, 43, 0.18);
-  color: #a9700c;
+  background: rgba(209, 138, 12, 0.18);
+  color: var(--warning);
 }
 .tag--error {
-  background: rgba(226, 96, 122, 0.16);
+  background: rgba(220, 76, 106, 0.16);
   color: var(--error);
+}
+/* 浮在天空面板上的标签 */
+.tag--on-sky {
+  background: rgba(var(--surface-rgb), 0.9);
+  color: var(--accent-deep);
 }
 
 :root[data-theme='dark'] .tag--english {
@@ -582,9 +920,6 @@ canvas {
 }
 :root[data-theme='dark'] .tag--major {
   color: #b9c4e8;
-}
-:root[data-theme='dark'] .tag--warn {
-  color: var(--warning);
 }
 
 .field {
@@ -606,7 +941,7 @@ canvas {
   width: 100%;
   min-height: 44px;
   padding: 0.5rem 0.875rem;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--text);
@@ -646,19 +981,21 @@ canvas {
 .progress {
   height: 10px;
   border-radius: 999px;
-  background: var(--surface-alt);
+  background: var(--surface-sunken);
   overflow: hidden;
 }
 
+/* 官方站的进度条配色：青 → 蓝，填充自带青色辉光 */
 .progress__fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), var(--arona));
-  transition: width 0.5s var(--ease-out);
+  background: linear-gradient(90deg, var(--accent-sky) 0%, var(--accent) 100%);
+  box-shadow: var(--glow-cyan);
+  transition: width var(--t-mid) ease;
 }
 
 .progress--thin {
-  height: 6px;
+  height: 7px;
 }
 
 .empty {
@@ -710,104 +1047,115 @@ canvas {
   grid-column: span 2;
 }
 
-/* ---------------- 7. 光环（签名图形） ---------------- */
+/* ---------------- 8. 天空面板 + 倒计时 Hero ---------------- */
 
-.halo-stage {
+/*
+ * 天空面板 = 一块真的"天窗"，整页唯一的大面积饱和色。
+ * 结构上分两半，这是对比度决定的设计：
+ *   上半（天顶，深）：倒计时，白字压得住
+ *   下半（地平线，浅）：作战状态条，用深色字
+ * 所以 hero 是 grid + 两行，状态条作为第二个 grid 子项落在下半。
+ */
+.sky-panel {
   position: relative;
-  display: grid;
-  place-items: center;
   isolation: isolate;
+  overflow: hidden;
+  border-radius: var(--r-xl);
+  border: 2px solid rgba(var(--surface-rgb), 0.85);
+  box-shadow: var(--sh-sky), inset 0 1px 0 rgba(var(--surface-rgb), 0.9);
 }
 
-.halo {
-  position: absolute;
-  border-radius: 50%;
-  border: 3px solid rgba(var(--accent-rgb), 0.5);
-  box-shadow: 0 0 26px rgba(var(--accent-rgb), 0.32), inset 0 0 20px rgba(var(--accent-rgb), 0.2);
-  animation: halo-turn 22s linear infinite;
-  pointer-events: none;
-  z-index: -1;
-}
-
-.halo::after {
+/* 天色：天顶 → 地平线，底部压一条发光云带（官方的招牌） */
+.sky-panel::before {
   content: '';
   position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-  border: 3px solid transparent;
-  border-top-color: var(--bg);
-  border-right-color: var(--bg);
-  transform: rotate(22deg);
+  inset: 0;
+  z-index: -1;
+  /* 天光只压在右下角（云那一侧），左上留深，白字才站得住 */
+  background: radial-gradient(80% 50% at 82% 96%, rgba(var(--surface-rgb), 0.75) 0%, transparent 64%),
+    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 34%, var(--sky-3) 70%, var(--sky-4) 100%);
 }
 
-.halo--2 {
-  animation-duration: 34s;
-  animation-direction: reverse;
-  opacity: 0.55;
+.sky-panel::after {
+  content: '';
+  position: absolute;
+  inset: auto -10% -30% -10%;
+  height: 58%;
+  z-index: -1;
+  border-radius: 50% 50% 0 0 / 58% 58% 0 0;
+  background: radial-gradient(58% 100% at 22% 100%, rgba(var(--surface-rgb), 0.95), transparent 70%),
+    radial-gradient(48% 100% at 64% 100%, rgba(var(--surface-rgb), 0.66), transparent 72%);
+  pointer-events: none;
 }
-
-@keyframes halo-turn {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ---------------- 8. 倒计时 Hero ---------------- */
 
 .hero {
   display: grid;
-  gap: 1.25rem;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  padding: clamp(1.25rem, 3.5vw, 2rem);
-  background: linear-gradient(160deg, var(--surface) 0%, var(--surface-alt) 100%);
-  border: 1.5px solid var(--border);
-  border-radius: var(--r-xl);
-  box-shadow: var(--sh-subtle);
-  overflow: hidden;
+  gap: clamp(0.75rem, 2.5vw, 1.5rem) clamp(1rem, 3vw, 2rem);
+  min-height: clamp(300px, 36vw, 400px);
+  padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1.5rem, 4vw, 2.5rem) clamp(1.25rem, 3vw, 2rem);
 }
 
 .countdown {
+  position: relative;
+  /* 自成层叠上下文：光环的 z-index:-1 才既能盖住天色、又垫在数字后面 */
+  isolation: isolate;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.35rem;
   min-width: 0;
 }
 
 .countdown__label {
   font-size: 0.875rem;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: #fff;
 }
 
 .countdown__num {
   font-family: var(--font-num);
-  font-size: clamp(4.5rem, 15vw, 10rem);
+  font-size: clamp(5rem, 17vw, 12rem);
   font-weight: 800;
-  line-height: 0.9;
-  letter-spacing: -0.03em;
-  color: var(--text);
+  line-height: 0.84;
+  letter-spacing: -0.035em;
+  color: #fff;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 20px rgba(var(--accent-ink-rgb), 0.28);
 }
 
 .countdown__unit {
-  font-size: 0.3em;
-  font-weight: 700;
-  color: var(--text-secondary);
+  font-size: 0.26em;
+  font-weight: 800;
+  color: #fff;
   margin-left: 0.15em;
+  letter-spacing: 0;
 }
 
 .countdown__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 0.875rem;
+  gap: 0.35rem 0.875rem;
+  margin-top: 0.35rem;
   font-size: 0.875rem;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: #fff;
 }
 
 .countdown__phase {
-  font-weight: 700;
-  color: var(--accent-deep);
+  font-weight: 800;
+  color: #fff;
+}
+
+.hero__side {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 156px;
 }
 
 /* 逐位翻动 */
@@ -826,20 +1174,133 @@ canvas {
   }
 }
 
-.hero__side {
+/* ---------------- 9. 作战状态条（天空面板的地平线一行） ---------------- */
+
+.strapbar {
+  grid-column: 1 / -1;
+  align-self: end;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  min-width: 150px;
+  gap: 0.75rem;
+  margin-top: clamp(1rem, 3vw, 1.75rem);
+  padding: 0.625rem 1rem;
+  border-radius: 999px;
+  /* 落在天色最亮的那一条上，所以自己带一层白底，把字压回可读 */
+  background: rgba(var(--surface-rgb), 0.72);
+  border: 1px solid rgba(var(--surface-rgb), 0.9);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  overflow: hidden;
 }
 
-/* ---------------- 9. 角色与台词 ---------------- */
+.strapbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.strapbar__item strong {
+  font-family: var(--font-num);
+  font-size: 1.0625rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.strapbar__dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.22);
+  animation: pulse-dot var(--t-float) ease-in-out infinite;
+}
+
+/* 状态条里的小标签走页脚那一档，13px 才过 AA */
+.strapbar .dim-2 {
+  color: var(--text-foot);
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(var(--accent-rgb), 0.1);
+  }
+}
+
+/* ---------------- 10. 光环（签名图形） ---------------- */
+
+.halo-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.halo {
+  position: absolute;
+  border-radius: 50%;
+  /* 官方的环不是正圆：是被透视压扁的椭圆，环身是"发光的带"而不是描边圆。
+     压扁交给容器，旋转交给内层，两者互不干扰。 */
+  transform: skewX(-16deg) scaleY(0.3);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.halo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* conic 的缺口做出"环上有断口"；mask 把圆盘挖成一条环带 */
+  background: conic-gradient(
+    from 0deg,
+    rgba(var(--surface-rgb), 0.95) 0deg 58deg,
+    transparent 58deg 88deg,
+    rgba(var(--surface-rgb), 0.95) 88deg 236deg,
+    transparent 236deg 268deg,
+    rgba(var(--surface-rgb), 0.95) 268deg 360deg
+  );
+  -webkit-mask: radial-gradient(
+    closest-side,
+    transparent 74%,
+    #000 77%,
+    #000 96%,
+    transparent 100%
+  );
+  mask: radial-gradient(closest-side, transparent 74%, #000 77%, #000 96%, transparent 100%);
+  filter: drop-shadow(0 0 7px rgba(var(--surface-rgb), 0.9))
+    drop-shadow(0 0 20px rgba(84, 220, 254, 0.75));
+  animation: halo-turn 44s linear infinite;
+}
+
+.halo--2 {
+  opacity: 0.5;
+}
+
+.halo--2::before {
+  animation-duration: 68s;
+  animation-direction: reverse;
+}
+
+@keyframes halo-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------- 11. 角色与台词 ---------------- */
 
 .mascot {
   width: var(--mascot-size, 96px);
   flex: none;
-  filter: drop-shadow(0 8px 16px rgba(var(--accent-rgb), 0.18));
+  filter: drop-shadow(0 10px 18px rgba(var(--accent-ink-rgb), 0.28));
 }
 
 .mascot__img {
@@ -863,6 +1324,10 @@ canvas {
 
 .mascot--hoshino {
   --mascot-size: 132px;
+}
+
+.mascot--hero {
+  --mascot-size: clamp(120px, 15vw, 176px);
 }
 
 .ch__svg {
@@ -917,12 +1382,15 @@ canvas {
   flex: 1;
   min-width: 0;
   background: var(--surface);
-  border: 1.5px solid rgba(var(--hoshino-rgb), 0.5);
+  border: 2px solid var(--border);
   border-radius: var(--r-lg) var(--r-lg) var(--r-lg) 6px;
   padding: 0.875rem 1.125rem 1rem;
   box-shadow: var(--sh-subtle);
 }
 
+.speech--hoshino {
+  border-color: rgba(var(--hoshino-rgb), 0.55);
+}
 .speech--arona {
   border-color: rgba(91, 200, 245, 0.55);
 }
@@ -930,20 +1398,28 @@ canvas {
   border-color: rgba(169, 180, 216, 0.6);
 }
 
+/* 角色名标签：压深到 4.5:1，粉色标注也不能靠"浅"来表达 */
 .speech__who {
   display: block;
   font-size: 0.8125rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: var(--hoshino-deep);
   margin-bottom: 0.15rem;
 }
 
-.speech--arona .speech__who {
-  color: #1d7fa8;
+.speech--hoshino {
+  --speech-who: #9c3f6b;
 }
-.speech--plana .speech__who {
-  color: #5c6a9c;
+.speech--arona {
+  --speech-who: #0b6e96;
+}
+.speech--plana {
+  --speech-who: #4e5c90;
+}
+
+.speech__who {
+  color: var(--speech-who, var(--hoshino-deep));
 }
 
 :root[data-theme='dark'] .speech--arona .speech__who {
@@ -980,22 +1456,43 @@ canvas {
   margin-top: 0.5rem;
 }
 
-/* ---------------- 10. 委托单 ---------------- */
+/* ---------------- 12. 委托单 ---------------- */
 
 .quest {
+  position: relative;
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.625rem;
   padding: 0.5rem 0.625rem;
   border-radius: var(--r-md);
-  border: 1.5px solid transparent;
-  transition: background-color 0.18s ease, border-color 0.18s ease;
+  border: 2px solid transparent;
+  /* 官方站实测的招牌交互：列表行向左滑 8px，左侧身份条同时被蓝色填满 */
+  transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease,
+    transform var(--t-fast) ease;
 }
 
 .quest:hover {
   background: var(--surface-alt);
   border-color: var(--border);
+  transform: translateX(-8px);
+}
+
+/* 左侧身份条：默认灰，hover 填蓝 */
+.quest::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background-color var(--t-fast) ease;
+}
+
+.quest:hover::before {
+  background: var(--accent);
 }
 
 .quest + .quest {
@@ -1004,11 +1501,11 @@ canvas {
 
 .quest__check {
   appearance: none;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   margin: 0;
   border: 2px solid var(--border-strong);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--surface);
   cursor: pointer;
   transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
@@ -1021,7 +1518,7 @@ canvas {
 .quest__check:checked {
   background: var(--accent)
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
-    center / 17px no-repeat;
+    center / 18px no-repeat;
   border-color: var(--accent);
   animation: check-pop 0.28s var(--ease-pop);
 }
@@ -1066,7 +1563,7 @@ canvas {
 }
 
 .quest[data-overdue='true'] {
-  border-color: rgba(226, 96, 122, 0.4);
+  border-color: rgba(220, 76, 106, 0.4);
 }
 
 .quest__tools {
@@ -1090,10 +1587,10 @@ canvas {
 .icon-btn {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -1106,7 +1603,7 @@ canvas {
 }
 
 .icon-btn--danger:hover {
-  background: rgba(226, 96, 122, 0.14);
+  background: rgba(220, 76, 106, 0.14);
   color: var(--error);
 }
 
@@ -1120,7 +1617,6 @@ canvas {
   transform: scaleX(-1);
 }
 
-/* 进度条式完成度 */
 .quest-progress {
   display: flex;
   align-items: center;
@@ -1130,7 +1626,7 @@ canvas {
   font-weight: 700;
 }
 
-/* ---------------- 11. 阶段计划 ---------------- */
+/* ---------------- 13. 阶段计划 ---------------- */
 
 .phase-list {
   display: flex;
@@ -1144,7 +1640,7 @@ canvas {
   gap: 0.875rem;
   align-items: center;
   padding: 0.75rem 0.875rem;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface);
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
@@ -1192,9 +1688,10 @@ canvas {
   font-weight: 800;
   color: var(--text);
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---------------- 12. 番茄钟 ---------------- */
+/* ---------------- 14. 番茄钟 ---------------- */
 
 .pomo {
   display: grid;
@@ -1219,12 +1716,12 @@ canvas {
 
 .pomo__ring circle {
   fill: none;
-  stroke-width: 9;
+  stroke-width: 10;
   stroke-linecap: round;
 }
 
 .pomo__ring .track {
-  stroke: var(--surface-alt);
+  stroke: var(--surface-sunken);
 }
 
 .pomo__ring .bar {
@@ -1261,7 +1758,7 @@ canvas {
 .chip {
   min-height: 40px;
   padding: 0 0.875rem;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
   color: var(--text-secondary);
@@ -1277,12 +1774,13 @@ canvas {
 }
 
 .chip[aria-pressed='true'] {
-  background: var(--accent-soft);
+  background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent-deep);
+  color: #fff;
+  box-shadow: 0 3px 0 var(--accent-deep);
 }
 
-/* ---------------- 13. 热力图 ---------------- */
+/* ---------------- 15. 热力图 ---------------- */
 
 .heatmap {
   display: grid;
@@ -1335,16 +1833,18 @@ canvas {
 .stat {
   padding: 0.75rem 0.875rem;
   border-radius: var(--r-md);
-  background: var(--surface-alt);
+  background: var(--surface-sunken);
+  border: 1px solid transparent;
 }
 
 .stat__value {
   font-family: var(--font-num);
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1.1;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .stat__label {
@@ -1352,7 +1852,7 @@ canvas {
   color: var(--text-secondary);
 }
 
-/* ---------------- 14. 勋章 ---------------- */
+/* ---------------- 16. 勋章 ---------------- */
 
 .medal-grid {
   display: grid;
@@ -1367,7 +1867,7 @@ canvas {
   align-items: center;
   gap: 0.5rem;
   padding: 1rem 0.75rem;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--r-lg);
   background: var(--surface);
   text-align: center;
@@ -1403,7 +1903,7 @@ canvas {
 }
 
 .medal[data-locked='true'] {
-  opacity: 0.5;
+  opacity: 0.55;
   filter: saturate(0.25);
 }
 
@@ -1427,7 +1927,7 @@ canvas {
   padding: 0.875rem 1rem;
   border-radius: var(--r-lg);
   background: var(--surface-alt);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
 }
 
 .level-bar__lv {
@@ -1442,10 +1942,10 @@ canvas {
   font-family: var(--font-num);
   font-size: 1.5rem;
   font-weight: 800;
-  box-shadow: var(--sh-subtle);
+  box-shadow: 0 4px 0 var(--accent-deep);
 }
 
-/* ---------------- 15. 错题本 / 目标看板 ---------------- */
+/* ---------------- 17. 错题本 / 目标看板 ---------------- */
 
 .item {
   display: grid;
@@ -1453,7 +1953,7 @@ canvas {
   gap: 0.625rem;
   align-items: center;
   padding: 0.75rem 0.875rem;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface);
   transition: border-color 0.18s ease;
@@ -1486,7 +1986,7 @@ canvas {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--surface-alt);
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
 }
 
@@ -1522,7 +2022,7 @@ canvas {
   text-align: center;
 }
 
-/* ---------------- 16. 弹窗 / 提示 ---------------- */
+/* ---------------- 18. 弹窗 / 提示 ---------------- */
 
 .modal-backdrop {
   position: fixed;
@@ -1531,7 +2031,7 @@ canvas {
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(var(--text-rgb), 0.28);
+  background: rgba(var(--text-rgb), 0.3);
   backdrop-filter: blur(10px);
   animation: fade-in 0.2s ease;
 }
@@ -1547,10 +2047,10 @@ canvas {
   max-height: min(86vh, 780px);
   overflow: auto;
   background: var(--surface);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--r-xl);
   padding: 1.25rem;
-  box-shadow: 0 20px 50px rgba(var(--text-rgb), 0.24);
+  box-shadow: 0 24px 56px rgba(var(--text-rgb), 0.26);
   animation: modal-in 0.28s var(--ease-out);
 }
 
@@ -1570,6 +2070,7 @@ canvas {
 
 .modal__title {
   font-size: 1.125rem;
+  font-weight: 800;
 }
 
 .modal__foot {
@@ -1600,7 +2101,7 @@ canvas {
   padding: 0.625rem 1rem;
   border-radius: 999px;
   background: var(--surface);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   box-shadow: var(--sh-elevated);
   font-weight: 700;
   font-size: 0.875rem;
@@ -1619,15 +2120,17 @@ canvas {
 }
 
 .toast__icon {
-  font-size: 1rem;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
 }
 
-/* ---------------- 17. 入场与滚动 reveal ---------------- */
+/* ---------------- 19. 入场与滚动 reveal ---------------- */
 
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -1636,7 +2139,7 @@ canvas {
 }
 
 .rise {
-  animation: rise-in 0.55s var(--ease-out) both;
+  animation: rise-in 0.6s var(--ease-out) both;
 }
 
 .rise[data-delay='1'] {
@@ -1660,11 +2163,12 @@ canvas {
   opacity: 1;
 }
 
-/* ---------------- 18. 响应式 ---------------- */
+/* ---------------- 20. 响应式 ---------------- */
 
 @media (max-width: 1000px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
+    padding-bottom: 0;
   }
 
   /* 平板上把侧栏收成「品牌行 + 导航行」的顶栏。
@@ -1683,8 +2187,7 @@ canvas {
     display: flex;
     flex-wrap: nowrap;
     white-space: nowrap;
-    border-bottom: 1.5px solid var(--border);
-    border-right: none;
+    border-bottom: 2px solid var(--border);
     padding: 0 0 0.625rem;
     margin: 0;
   }
@@ -1731,21 +2234,19 @@ canvas {
     margin-left: 0.25rem;
   }
 
-  .sidenav__foot {
-    display: none;
-  }
-
   .bento > * {
     grid-column: span 6 !important;
   }
 
   .hero {
     grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
   }
 
   .hero__side {
     flex-direction: row;
     justify-content: center;
+    min-width: 0;
   }
 
   .pomo {
@@ -1815,6 +2316,10 @@ canvas {
     position: relative;
   }
 
+  .nav-item[aria-current='page'] {
+    box-shadow: none;
+  }
+
   .nav-item__icon {
     width: 21px;
     height: 21px;
@@ -1830,8 +2335,22 @@ canvas {
     font-size: 0.625rem;
   }
 
+  .sky-panel {
+    padding: 1.25rem 1.125rem;
+    border-radius: var(--r-lg);
+  }
+
+  .mascot--hero {
+    --mascot-size: 104px;
+  }
+
   .countdown__num {
-    font-size: clamp(3.5rem, 21vw, 5.5rem);
+    font-size: clamp(4rem, 22vw, 6rem);
+  }
+
+  /* 小屏省掉常驻光环动画，省电也省得画面挤 */
+  .halo {
+    display: none;
   }
 
   .card {
@@ -1839,9 +2358,12 @@ canvas {
     border-radius: var(--r-md);
   }
 
-  .hero {
-    padding: 1.125rem;
-    border-radius: var(--r-lg);
+  .pagefoot {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  }
+
+  .pagefoot__meta {
+    margin-left: 0;
   }
 
   .mascot--hoshino {
@@ -1874,7 +2396,7 @@ canvas {
   }
 
   .quest {
-    grid-template-columns: 26px minmax(0, 1fr);
+    grid-template-columns: 28px minmax(0, 1fr);
     row-gap: 0.35rem;
   }
 
@@ -1906,16 +2428,51 @@ canvas {
     text-align: left;
     padding-top: 0.35rem;
   }
+
+  .strapbar {
+    flex-wrap: wrap;
+    border-radius: var(--r-lg);
+    gap: 0.35rem 0.75rem;
+  }
+
+  .strapbar .strap {
+    display: none;
+  }
+
+  /* 手机上光柱只留一条，减少绘制 */
+  .bg-ray--2,
+  .bg-ray--3 {
+    display: none;
+  }
 }
 
-/* ---------------- 19. 打印 & 减弱动效 ---------------- */
+/* ---------------- 21. 打印 & 减弱动效 ---------------- */
 
 @media print {
   .sidenav,
   .toast-host,
   .bg-layer,
+  .pagefoot,
   .btn {
     display: none !important;
+  }
+  .sky-panel {
+    color: var(--text);
+    background: none;
+    border-color: var(--border);
+    box-shadow: none;
+  }
+  .sky-panel::after,
+  .sky-panel::before {
+    display: none;
+  }
+  .countdown__num,
+  .countdown__label,
+  .countdown__meta,
+  .countdown__unit,
+  .countdown__phase {
+    color: var(--text);
+    text-shadow: none;
   }
   .card {
     break-inside: avoid;
@@ -1937,11 +2494,18 @@ canvas {
   }
 
   .halo,
+  .bg-ray,
+  .bg-cloud,
+  .bg-layer__spark,
   .mascot--float,
   .ch__halo,
   .ch__eyes,
-  .bg-layer__spark {
+  .strapbar__dot {
     animation: none !important;
+  }
+
+  .bg-ray {
+    opacity: 0.4;
   }
 
   .countdown__digit {
@@ -1950,5 +2514,12 @@ canvas {
 
   [data-reveal] {
     opacity: 1;
+  }
+}
+
+/* 不支持 backdrop-filter 时给个不透明兜底，避免底栏糊成一片 */
+@supports not (backdrop-filter: blur(10px)) {
+  :root {
+    --glass: var(--surface);
   }
 }
