@@ -19,8 +19,13 @@
 
 [CmdletBinding()]
 param(
+  # 参数名刻意**不叫** $Username：在本机 PowerShell 里 $Username 会被解析成
+  # Windows 登录名（$env:USERNAME），无论传什么进来都会被悄悄换掉。
+  # 踩过这个坑，表现是「明明输入了正确用户名，却推到了别人的地址」。
+  # 保留 -Username 作为别名，这样原来的调用方式照样能用。
   [Parameter(Mandatory = $true)]
-  [string]$Username,
+  [Alias('Username')]
+  [string]$GitHubUser,
 
   [string]$Repo = 'kivotos-kaoyan',
 
@@ -86,19 +91,20 @@ if (-not $SkipBuild) {
 }
 
 # 检查 git 身份（提交记录会用到）
-$userName = git config user.name
-$userEmail = git config user.email
-if (-not $userName -or -not $userEmail) {
+# 注意：这里读的是本仓库已有的 git 配置，和 -GitHubUser 是两回事，别混用。
+$gitName = git config user.name
+$gitEmail = git config user.email
+if (-not $gitName -or -not $gitEmail) {
   Write-Warn2 '检测到 git 还没配置用户名/邮箱，正在按你的 GitHub 用户名设置…'
-  git config user.name $Username
-  git config user.email "$Username@users.noreply.github.com"
-  Write-Ok "已设置：$Username <$Username@users.noreply.github.com>"
-} elseif ($userEmail -eq 'dev@example.com') {
-  Write-Warn2 "当前提交邮箱是占位值 dev@example.com，已改成 GitHub 的隐私邮箱。"
-  git config user.email "$Username@users.noreply.github.com"
-  Write-Ok "提交邮箱：$Username@users.noreply.github.com"
+  git config user.name $GitHubUser
+  git config user.email "$GitHubUser@users.noreply.github.com"
+  Write-Ok "已设置：$GitHubUser <$GitHubUser@users.noreply.github.com>"
+} elseif ($gitEmail -eq 'dev@example.com') {
+  Write-Warn2 '当前提交邮箱是占位值 dev@example.com，已改成 GitHub 的隐私邮箱。'
+  git config user.email "$GitHubUser@users.noreply.github.com"
+  Write-Ok "提交邮箱：$GitHubUser@users.noreply.github.com"
 } else {
-  Write-Ok "提交身份：$userName <$userEmail>"
+  Write-Ok "提交身份：$gitName <$gitEmail>"
 }
 
 # ---------- 2. 初始化仓库 ----------
@@ -153,7 +159,7 @@ Write-Step 5 '推送到 GitHub'
 
 # 运行时变量诊断（排查变量被意外替换）
 try {
-  $diag = "Username=[$Username]`nRepo=[$Repo]`nenvUSERNAME=[$env:USERNAME]`nPSBoundParameters=[$(($PSBoundParameters.Keys) -join ',')]`nargs=[$($args -join ' ')]`n"
+  $diag = "Username=[$GitHubUser]`nRepo=[$Repo]`nenvUSERNAME=[$env:USERNAME]`nPSBoundParameters=[$(($PSBoundParameters.Keys) -join ',')]`nargs=[$($args -join ' ')]`n"
   [System.IO.File]::WriteAllText("$env:TEMP\deploy-diag.txt", $diag, (New-Object System.Text.UTF8Encoding($false)))
 } catch { }
 
@@ -187,7 +193,7 @@ if (-not $gitProxy) {
   Write-Host '  未使用代理。若推送报 Connection was reset，请先打开你的代理软件再重试。' -ForegroundColor DarkGray
 }
 
-$remoteUrl = "https://github.com/$Username/$Repo.git"
+$remoteUrl = "https://github.com/$GitHubUser/$Repo.git"
 
 # 先确认「用户名 + 仓库」在 GitHub 上真的存在。
 # 踩过的坑：把本机 git 配置里的占位值（user.name=FPGA-Dev）当成 GitHub 用户名输进来，
@@ -195,7 +201,7 @@ $remoteUrl = "https://github.com/$Username/$Repo.git"
 #
 # 这里刻意不封装成函数：PowerShell 里 $Name / $Username 这类变量容易和自动变量、
 # 外层作用域串味，内联写反而最不容易出错。
-$apiUrl = 'https://api.github.com/repos/' + $Username + '/' + $Repo
+$apiUrl = 'https://api.github.com/repos/' + $GitHubUser + '/' + $Repo
 $curlArgs = @('-s', '-o', 'NUL', '-w', '%{http_code}', '-m', '20')
 $proxyForCurl = ($gitProxy | Where-Object { $_ -like 'https.proxy=*' } | Select-Object -First 1)
 if ($proxyForCurl) { $curlArgs += @('--proxy', ($proxyForCurl -replace '^https\.proxy=', '')) }
@@ -209,9 +215,9 @@ $ErrorActionPreference = $eapBackup
 if (-not $repoCode) { $repoCode = '000' }
 
 switch ($repoCode) {
-  '200' { Write-Ok "仓库存在：https://github.com/$Username/$Repo" }
+  '200' { Write-Ok "仓库存在：https://github.com/$GitHubUser/$Repo" }
   '404' {
-    Write-Err2 "GitHub 上找不到仓库 https://github.com/$Username/$Repo"
+    Write-Err2 "GitHub 上找不到仓库 https://github.com/$GitHubUser/$Repo"
     Write-Host ''
     Write-Host '  两种可能：' -ForegroundColor Yellow
     Write-Host '   (1) 还没创建它 → 打开 https://github.com/new'
@@ -279,13 +285,13 @@ Write-Host '======================================================' -ForegroundC
 Write-Host ' 代码已上传。还剩最后一步：打开 GitHub Pages' -ForegroundColor Green
 Write-Host '======================================================' -ForegroundColor Green
 Write-Host ''
-Write-Host " 1. 打开 https://github.com/$Username/$Repo/settings/pages"
+Write-Host " 1. 打开 https://github.com/$GitHubUser/$Repo/settings/pages"
 Write-Host ' 2. 在 Build and deployment 的 Source 里，选 GitHub Actions'
-Write-Host " 3. 打开 https://github.com/$Username/$Repo/actions 看部署进度"
+Write-Host " 3. 打开 https://github.com/$GitHubUser/$Repo/actions 看部署进度"
 Write-Host '    等它变成绿色对勾（约 1 分钟）'
 Write-Host ''
 Write-Host ' 你的网站地址将是：' -NoNewline
-Write-Host "https://$Username.github.io/$Repo/" -ForegroundColor Cyan
+Write-Host "https://$GitHubUser.github.io/$Repo/" -ForegroundColor Cyan
 Write-Host ''
 Write-Host ' 以后想更新内容：改完代码，再跑一次这个脚本就行。' -ForegroundColor Yellow
 Write-Host ''
