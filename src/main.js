@@ -118,9 +118,13 @@ function buildShell() {
     ])
   )
 
-  const tabbar = el('div', { class: 'tabbar' })
+  // 导航按钮**直接挂在 .sidenav 下**，不要再套一层 .tabbar。
+  // 原因：.tabbar 的 display:none 是给窄屏预留的开关，一旦把导航装进它里面，
+  // 宽屏（>1000px）下 8 个按钮就会跟着一起被隐藏，桌面端等于没有导航。
+  // 直接挂 .sidenav 后，三种宽度都靠 .sidenav 自己的 flex-direction 适配：
+  //   桌面 = 纵向侧栏 / 平板 = 纵向顶栏 / 手机 = 横向底部标签栏
   for (const item of NAV) {
-    tabbar.append(
+    sidenav.append(
       el(
         'button',
         {
@@ -136,7 +140,6 @@ function buildShell() {
       )
     )
   }
-  sidenav.append(tabbar)
 
   const main = el('main', { class: 'main', id: 'main', tabindex: '-1' })
   const shell = el('div', { class: 'shell' }, [sidenav, main])

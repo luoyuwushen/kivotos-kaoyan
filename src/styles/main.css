@@ -601,9 +601,9 @@ canvas {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
-.tabbar {
-  display: none;
-}
+/* 注意：这里**不要**再加 .tabbar { display: none } 这类规则。
+   导航项现在直接挂在 .sidenav 下，宽屏/窄屏都靠 .sidenav 的 flex-direction 适配。
+   曾经的写法把导航装进 .tabbar 并在宽屏隐藏它，导致桌面端 8 个导航按钮全部消失。 */
 
 /* ---------------- 6. 页脚（独立成条，压在那条云带上） ---------------- */
 
@@ -2198,13 +2198,16 @@ canvas {
     padding-bottom: 0;
   }
 
-  /* 平板上把侧栏收成「品牌行 + 导航行」的顶栏。
-     两行而不是一行，是为了让 8 个导航项一次全部可见，不用横滑。 */
+  /* 平板上把侧栏收成「品牌 + 导航」两行的顶栏。
+     两行而不是一行，是为了让 8 个导航项一次全部可见，不用横滑。
+     导航项是 .sidenav 的直接子元素，所以这里直接给 .sidenav 设换行行向。 */
   .sidenav {
     position: static;
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.375rem;
     padding: 0.75rem;
     border-radius: var(--r-lg);
     overflow: visible;
@@ -2214,9 +2217,11 @@ canvas {
     display: flex;
     flex-wrap: nowrap;
     white-space: nowrap;
-    border-bottom: 2px solid var(--border);
-    padding: 0 0 0.625rem;
+    border-bottom: none;
+    border-right: 2px solid var(--border);
+    padding: 0 0.875rem 0 0;
     margin: 0;
+    flex: 0 0 auto;
   }
 
   .brand__text {
@@ -2232,23 +2237,8 @@ canvas {
     white-space: nowrap;
   }
 
-  .tabbar {
-    display: flex;
-    gap: 0.25rem;
-    min-width: 0;
-    justify-content: space-between;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .tabbar::-webkit-scrollbar {
-    display: none;
-  }
-
   .nav-item {
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-width: 0;
     justify-content: center;
     gap: 0.3rem;
@@ -2306,7 +2296,9 @@ canvas {
     gap: 0.875rem;
   }
 
-  /* 侧栏在手机上变成底部标签栏 */
+  /* 侧栏在手机上变成底部标签栏。
+     导航项是 .sidenav 的直接子元素，所以这里让 .sidenav 变成横向一排，
+     并禁止换行（否则 8 个按钮会被挤成两行、把底部栏撑高）。 */
   .sidenav {
     position: fixed;
     z-index: 50;
@@ -2315,6 +2307,7 @@ canvas {
     bottom: 0;
     top: auto;
     flex-direction: row;
+    flex-wrap: nowrap;
     justify-content: space-between;
     gap: 0;
     padding: 0.375rem 0.25rem calc(0.375rem + env(safe-area-inset-bottom));
@@ -2331,12 +2324,9 @@ canvas {
     display: none;
   }
 
-  .tabbar {
-    display: contents;
-  }
-
   .nav-item {
     flex: 1 1 0;
+    min-width: 0;
     flex-direction: column;
     gap: 0.1rem;
     min-height: 52px;

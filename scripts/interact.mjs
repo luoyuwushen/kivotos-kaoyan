@@ -190,23 +190,40 @@ const afterReload = await page.evaluate((k) => JSON.parse(localStorage.getItem(k
 check('刷新后数据仍在', afterReload.quests.length > 0 && afterReload.goals.length > 0,
   `${afterReload.quests.length} 条委托 / ${afterReload.goals.length} 条目标`)
 
-/* ---------- 15. 平板导航是否 8 项全可见 ---------- */
-const tablet = await context.newPage()
-await tablet.setViewportSize({ width: 834, height: 1112 })
-await tablet.goto(BASE + '#home', { waitUntil: 'domcontentloaded' })
-await tablet.waitForTimeout(900)
-const navFit = await tablet.evaluate(() => {
-  const items = [...document.querySelectorAll('.tabbar .nav-item')]
-  const bar = document.querySelector('.tabbar')
-  const barRect = bar.getBoundingClientRect()
-  const hidden = items.filter((el) => {
-    const r = el.getBoundingClientRect()
-    return r.right > barRect.right + 1 || r.left < barRect.left - 1 || r.width < 20
+/* ---------- 15. 导航项在四种宽度下都必须可见（曾经的 bug：宽屏全被隐藏） ---------- */
+async function checkNavAt(label, width, height) {
+  const p = await context.newPage()
+  await p.setViewportSize({ width, height })
+  await p.goto(BASE + '#home', { waitUntil: 'domcontentloaded' })
+  await p.waitForTimeout(900)
+  const info = await p.evaluate(() => {
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const items = [...document.querySelectorAll('.nav-item[data-view]')]
+    const notVisible = items.filter((el) => {
+      const r = el.getBoundingClientRect()
+      return !(r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw)
+    }).map((el) => el.dataset.view)
+    const settings = items.find((el) => el.dataset.view === 'settings')
+    const sr = settings?.getBoundingClientRect()
+    return {
+      total: items.length,
+      notVisible,
+      settingsVisible: sr ? sr.width > 4 && sr.height > 4 : false,
+      overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    }
   })
-  return { total: items.length, hidden: hidden.length, scrollable: bar.scrollWidth > bar.clientWidth + 2 }
-})
-check('平板导航 8 项全部可见', navFit.total === 8 && navFit.hidden === 0 && !navFit.scrollable,
-  `共 ${navFit.total} 项，${navFit.hidden} 项被裁，${navFit.scrollable ? '需要横滑' : '不需横滑'}`)
+  check(`${label} 导航 8 项全部可见`,
+    info.total === 8 && info.notVisible.length === 0 && info.settingsVisible,
+    `共 ${info.total} 项，不可见 ${info.notVisible.length} 项${info.notVisible.length ? '（' + info.notVisible.join(',') + '）' : ''}，设置=${info.settingsVisible ? '可见' : '★不可见★'}`)
+  if (info.overflowX > 2) check(`${label} 无横向溢出`, false, `溢出 ${info.overflowX}px`)
+  await p.close()
+}
+
+await checkNavAt('桌面 1440', 1440, 900)
+await checkNavAt('笔记本 1280', 1280, 800)
+await checkNavAt('临界 1000', 1000, 800)
+await checkNavAt('平板 834', 834, 1112)
 
 /* ---------- 手机端底部标签栏 ---------- */
 const mobile = await context.newPage()
@@ -216,12 +233,18 @@ await mobile.waitForTimeout(900)
 const mobileOk = await mobile.evaluate(() => {
   const bar = document.querySelector('.sidenav')
   const style = getComputedStyle(bar)
-  const items = document.querySelectorAll('.tabbar .nav-item')
-  const touch = [...items].every((el) => el.getBoundingClientRect().height >= 44)
-  return { position: style.position, bottom: style.bottom, count: items.length, touch }
+  const items = document.querySelectorAll('.nav-item[data-view]')
+  const rects = [...items].map((el) => el.getBoundingClientRect())
+  const touch = rects.every((r) => r.height >= 44 && r.width >= 44)
+  // 底部栏必须是一行：所有按钮的 top 值应几乎相同
+  const tops = rects.map((r) => Math.round(r.top))
+  const oneRow = Math.max(...tops) - Math.min(...tops) <= 4
+  return { position: style.position, bottom: style.bottom, count: items.length, touch, oneRow }
 })
 check('手机端导航固定到底部', mobileOk.position === 'fixed' && mobileOk.bottom === '0px', JSON.stringify(mobileOk))
-check('手机端 8 个标签且触摸目标 ≥44px', mobileOk.count === 8 && mobileOk.touch)
+check('手机端 8 个标签、触摸目标 ≥44px、单行排列',
+  mobileOk.count === 8 && mobileOk.touch && mobileOk.oneRow,
+  `共 ${mobileOk.count} 项，触摸达标=${mobileOk.touch}，单行=${mobileOk.oneRow}`)
 
 await browser.close()
 
