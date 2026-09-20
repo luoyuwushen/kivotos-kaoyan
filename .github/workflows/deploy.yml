@@ -1,29 +1,48 @@
 name: 部署到 GitHub Pages
 
+# ─────────────────────────────────────────────────────────────
+# 本站有两条部署路线，**二选一**，按你 Settings → Pages 里的 Source 决定：
+#
+# 路线 A（推荐给小白）：Source 选 Deploy from a branch → gh-pages / (root)
+#    不需要这个工作流。构建产物已经放在 gh-pages 分支里，GitHub 自己发布。
+#    本文件在路线 A 下不会造成任何影响（见下面的 if 条件）。
+#
+# 路线 B：Source 选 GitHub Actions
+#    用这个工作流自动构建 + 发布。到 Actions 页面手动点一次 Run workflow 即可。
+#
+# 如果你两种都想试，请先只启用其中一种，避免互相覆盖。
+# ─────────────────────────────────────────────────────────────
+
 on:
-  # 推送到 main 分支时自动部署
   push:
     branches: [main]
-  # 也可以在 Actions 页面手动点一次运行
   workflow_dispatch:
 
-# 允许 GITHUB_TOKEN 发布到 Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# 同一时间只跑一个部署，新的推送会取消排队中的旧任务
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
   build:
+    # 只在手动触发时运行。
+    # 原因：如果 Pages 没启用（Source 还是 None），每次推送都会在
+    # "配置 Pages" 这一步失败，Actions 页面就会一直挂着红色记录，很误导。
+    # 走 gh-pages 分支路线时，这个工作流完全不需要参与。
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
+
+      - name: 检查 Pages 是否已启用
+        id: check
+        run: |
+          echo "如果下一步『配置 Pages』失败，说明 Settings → Pages 的 Source 还没设成 GitHub Actions。"
 
       - name: 安装 Node
         uses: actions/setup-node@v4

@@ -273,21 +273,71 @@ if ($pushExit -ne 0) {
 
 Write-Ok '推送成功！'
 
+# ---------- 6. 把构建产物同步到 gh-pages 分支 ----------
+# 这样 Settings → Pages 里选「Deploy from a branch → gh-pages / (root)」就能直接发布，
+# 不需要 GitHub Actions，也不需要任何 CI 配置。
+Write-Step 6 '同步构建产物到 gh-pages 分支'
+
+if ($SkipBuild) {
+  Write-Warn2 '跳过了构建，dist/ 可能是旧的。先跑一次 npm run build 再同步才准确。'
+}
+
+if (-not (Test-Path (Join-Path $root 'dist\index.html'))) {
+  Write-Warn2 'dist/index.html 不存在，跳过 gh-pages 同步。请先运行 npm run build。'
+} else {
+  New-Item -ItemType File -Path (Join-Path $root 'dist\.nojekyll') -Force | Out-Null
+
+  $currentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
+  $oldEap2 = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+
+  # 用底层命令构造一个只含 dist 内容的提交，全程不切换分支、不动工作区
+  git read-tree --empty 2>$null | Out-Null
+  git --work-tree=dist add -f -- . 2>$null | Out-Null
+  $tree = (git write-tree).Trim()
+  $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm'
+  $commit = (git -c user.name="$GitHubUser" -c user.email="$GitHubUser@users.noreply.github.com" commit-tree $tree -m "构建产物更新 $stamp").Trim()
+  git reset 2>$null | Out-Null   # 把索引还原回当前分支
+
+  $ErrorActionPreference = $oldEap2
+
+  if (-not $tree -or -not $commit) {
+    Write-Warn2 '生成 gh-pages 提交失败，跳过。网页部署请改用 Source = GitHub Actions。'
+  } else {
+    git branch -f gh-pages $commit 2>$null
+    $pagesExit = Invoke-Native -Command 'git' -Arguments ($gitProxy + @('push', '-f', 'origin', 'gh-pages'))
+    if ($pagesExit -eq 0) {
+      Write-Ok '已同步到 gh-pages 分支（Settings 里选它就是发布这个内容）'
+    } else {
+      Write-Warn2 'gh-pages 推送失败。网页部署请改用 Source = GitHub Actions，或在 Actions 页面手动 Run workflow。'
+    }
+    # 确认没有因为上面的底层操作把工作区搞乱
+    if ((git rev-parse --abbrev-ref HEAD).Trim() -ne $currentBranch) {
+      Write-Warn2 "当前分支意外变成了 $(git rev-parse --abbrev-ref HEAD)，正在切回 $currentBranch"
+      git checkout $currentBranch 2>$null | Out-Null
+    }
+  }
+}
+
 # ---------- 完成 ----------
 Write-Host ''
 Write-Host '======================================================' -ForegroundColor Green
-Write-Host ' 代码已上传。还剩最后一步：打开 GitHub Pages' -ForegroundColor Green
+Write-Host ' 代码已上传。剩下最后一步：打开 GitHub Pages' -ForegroundColor Green
 Write-Host '======================================================' -ForegroundColor Green
 Write-Host ''
-Write-Host " 1. 打开 https://github.com/$GitHubUser/$Repo/settings/pages"
-Write-Host ' 2. 在 Build and deployment 的 Source 里，选 GitHub Actions'
-Write-Host " 3. 如果 Actions 里上次的部署是红的（配置 Pages 那步失败），"
-Write-Host "    打开 https://github.com/$GitHubUser/$Repo/actions 点进那次运行，"
-Write-Host '    右上角 Re-run all jobs 重跑一次；或者再跑一遍本脚本推一次空提交。'
-Write-Host ' 4. 等它变成绿色对勾（约 1 分钟）'
+Write-Host " 打开 https://github.com/$GitHubUser/$Repo/settings/pages"
 Write-Host ''
-Write-Host ' 你的网站地址将是：' -NoNewline
+Write-Host ' 推荐选法（最简单，不需要任何 CI）：'
+Write-Host '   Build and deployment → Source 选  Deploy from a branch'
+Write-Host '   下面 Branch 选  gh-pages   ，目录选  / (root)   → Save' -ForegroundColor Cyan
+Write-Host ''
+Write-Host ' 另一种选法（用 GitHub Actions 自动构建）：'
+Write-Host '   Source 选  GitHub Actions'
+Write-Host '   然后到 Actions 页面点 Run workflow 手动跑一次'
+Write-Host ''
+Write-Host ' 两种选一种就行，别同时开。地址都是：' -NoNewline
 Write-Host "https://$GitHubUser.github.io/$Repo/" -ForegroundColor Cyan
 Write-Host ''
+Write-Host ' 首次启用后大约 1 分钟生效；如果打开是 404，等一分钟再刷新。' -ForegroundColor Yellow
 Write-Host ' 以后想更新内容：改完代码，再跑一次这个脚本就行。' -ForegroundColor Yellow
 Write-Host ''
