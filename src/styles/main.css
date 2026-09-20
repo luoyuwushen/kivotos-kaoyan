@@ -1,24 +1,15 @@
 /* =========================================================================
-   基沃托斯作战本部 · 样式表
-   Token 全部来自 DESIGN.md，组件中不出现硬编码配色。
+   基沃托斯作战本部 · 样式�?   Token 全部来自 DESIGN.md，组件中不出现硬编码配色�?
+   本版视觉基准：官方站那一片天空（�?DESIGN.md「设计依据」）�?   三条主线�?     1) 底部铺一层薄天空 + 斜射光柱 + 页脚云带 —�?让白底不再是一片死�?     2) 首页 Hero 升格为整页唯一的天空面板，倒计时用巨型纯白数字 + 压扁的光�?     3) 每类卡片有身份色竖条与三层叠�?—�?打破上一版的均质表格�?   ========================================================================= */
 
-   本版视觉基准：官方站那一片天空（见 DESIGN.md「设计依据」）。
-   三条主线：
-     1) 底部铺一层薄天空 + 斜射光柱 + 页脚云带 —— 让白底不再是一片死白
-     2) 首页 Hero 升格为整页唯一的天空面板，倒计时用巨型纯白数字 + 压扁的光环
-     3) 每类卡片有身份色竖条与三层叠边 —— 打破上一版的均质表格感
-   ========================================================================= */
-
-/* 数字字形：官方站的大数字走几何无衬线，Poppins 是最接近的免费替代。
-   断网时自动回退到系统字形，不影响任何功能。 */
+/* 数字字形：官方站的大数字走几何无衬线，Poppins 是最接近的免费替代�?   断网时自动回退到系统字形，不影响任何功能�?*/
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&display=swap');
 
 /* ---------------- 1. Tokens ---------------- */
 
 :root {
   /* 天空分层。数值是按对比度审计反推的：
-     白字要 3:1（大字）就得压在天色 50% 以内，要 4.5:1（小字）就得压在 42% 以内。
-     所以渐变必须"深得久一点"，从 46% 之后才开始化到地平线。 */
+     白字�?3:1（大字）就得压在天色 50% 以内，要 4.5:1（小字）就得压在 42% 以内�?     所以渐变必�?深得久一�?，从 46% 之后才开始化到地平线�?*/
   --sky-1: #1d5c9e;
   --sky-2: #2b74b8;
   --sky-3: #3f8ccd;
@@ -35,7 +26,7 @@
   /* 半透明面板 */
   --panel-glass: rgba(255, 255, 255, 0.82);
 
-  /* 边框：一律带蓝调，且比上一版更实 */
+  /* 边框：一律带蓝调，且比上一版更�?*/
   --border: #afd3ef;
   --border-strong: #7fb8e4;
   --border-hover: #1189f9;
@@ -43,29 +34,29 @@
   /* 文字 */
   --text: #123a5c;
   --text-secondary: #3f6b90;
-  /* 13px 以下的小字要 4.5:1，上一版的 #7c9cbb 在浅底上只有 2.7:1，压深 */
+  /* 13px 以下的小字要 4.5:1，上一版的 #7c9cbb 在浅底上只有 2.7:1，压�?*/
   --text-tertiary: #5c7d9d;
   /* 页脚专用：比 tertiary 再深一档，保证 12px 小字也过 AA */
   --text-foot: #456687;
 
-  /* 强调色：官方站 #1189F9 起手 */
+  /* 强调色：官方�?#1189F9 起手 */
   --accent: #1189f9;
   --accent-deep: #0a63be;
   --accent-soft: #d3e9fe;
   --accent-hover: #21bbff;
   --accent-sky: #54dcfe;
   --accent-ink: #0a3d6b;
-  --glow: #a7d8ea; /* 官方站 CSS 里那个真实的"光晕冰蓝"，全站辉光都用它 */
+  --glow: #a7d8ea; /* 官方�?CSS 里那个真实的"光晕冰蓝"，全站辉光都用它 */
   --paper: #f8f8f8; /* 次级面板纸面 */
   --paper-warm: #dfdcce; /* 委托单那种票据纸 */
   --strap-bg: rgba(var(--surface-rgb), 0.72);
   --strap-bd: rgba(var(--surface-rgb), 0.9);
   --chip-bg: rgba(8, 45, 80, 0.5);
 
-  /* 角色色 */
+  /* 角色�?*/
   --hoshino: #f2a0bf;
   --hoshino-deep: #d9739a;
-  --hoshino-ink: #9c3f6b; /* 13px 名字标签专用：粉要压深才过 4.5:1 */
+  --hoshino-ink: #9c3f6b; /* 13px 名字标签专用：粉要压深才�?4.5:1 */
   --arona: #5bc8f5;
   --arona-ink: #0b6e96;
   --plana: #a9b4d8;
@@ -77,7 +68,7 @@
   --error: #dc4c6a;
   --star: #ffc93c;
 
-  /* RGB 辅助值 */
+  /* RGB 辅助�?*/
   --bg-rgb: 244, 249, 254;
   --surface-rgb: 255, 255, 255;
   --accent-rgb: 17, 137, 249;
@@ -85,7 +76,7 @@
   --glow-rgb: 167, 216, 234;
   --text-rgb: 18, 58, 92;
   --hoshino-rgb: 242, 160, 191;
-  /* 语义色与科目色的 RGB 位：组件里要调透明度时只准用这些，不准再写数值 */
+  /* 语义色与科目色的 RGB 位：组件里要调透明度时只准用这些，不准再写数�?*/
   --error-rgb: 220, 76, 106;
   --success-rgb: 20, 160, 107;
   --warning-rgb: 209, 138, 12;
@@ -104,7 +95,7 @@
   --font-num: 'Poppins', 'Baloo 2', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Consolas, monospace;
 
-  /* 圆角：收敛成四档，对齐官方站 7.5 / 11.25 / 18 / 37.5 的口径 */
+  /* 圆角：收敛成四档，对齐官方站 7.5 / 11.25 / 18 / 37.5 的口�?*/
   --r-sm: 10px;
   --r-md: 14px;
   --r-lg: 18px;
@@ -112,9 +103,7 @@
   --gap: 1rem;
   --pad-card: 1.125rem 1.25rem;
 
-  /* 阴影：一律带蓝调，禁止中性灰。
-     官方站 CSS 里的真实阴影是"宽、软、蓝"，辉光色是 --glow；
-     --frame 复刻官方站那套三层叠边（内发丝 + 内白高光 + 外辉光）。 */
+  /* 阴影：一律带蓝调，禁止中性灰�?     官方�?CSS 里的真实阴影�?宽、软、蓝"，辉光色�?--glow�?     --frame 复刻官方站那套三层叠边（内发�?+ 内白高光 + 外辉光）�?*/
   --sh-subtle: 0 2px 10px rgba(var(--glow-rgb), 0.45);
   --sh-elevated: 0 4px 18px rgba(var(--glow-rgb), 0.7);
   --sh-sky: 0 12px 34px -6px rgba(var(--glow-rgb), 0.85);
@@ -124,7 +113,7 @@
   --glow-cyan: 0 0 12px rgba(84, 220, 254, 0.55);
   --sh-pressed: 0 3px 0 var(--accent-deep), 0 6px 16px rgba(var(--accent-rgb), 0.35);
 
-  /* 动效时长：对齐官方站实测的 .3 / .5 / 1s ease + 3s 呼吸 */
+  /* 动效时长：对齐官方站实测�?.3 / .5 / 1s ease + 3s 呼吸 */
   --t-fast: 0.3s;
   --t-mid: 0.5s;
   --t-slow: 1s;
@@ -249,7 +238,7 @@ canvas {
   border-radius: 4px;
 }
 
-/* 天空面板里的焦点环要换成白色，否则蓝底上看不见 */
+/* 天空面板里的焦点环要换成白色，否则蓝底上看不�?*/
 .sky-panel :focus-visible {
   outline-color: var(--surface);
 }
@@ -292,7 +281,7 @@ canvas {
   color: var(--text-tertiary);
 }
 
-/* 屏幕阅读器专用 */
+/* 屏幕阅读器专�?*/
 .sr-only {
   position: absolute;
   width: 1px;
@@ -315,7 +304,7 @@ canvas {
   overflow: hidden;
 }
 
-/* ① 天色本身：天顶蓝 → 地平线近白。用固定层，滚动时天色不动，像真的天 */
+/* �?天色本身：天顶蓝 �?地平线近白。用固定层，滚动时天色不动，像真的天 */
 .bg-sky {
   position: absolute;
   inset: 0;
@@ -328,7 +317,7 @@ canvas {
   );
 }
 
-/* ② 左上角天光 + 右上角次级光斑：给平色层一点呼吸 */
+/* �?左上角天�?+ 右上角次级光斑：给平色层一点呼�?*/
 .bg-bloom {
   position: absolute;
   border-radius: 50%;
@@ -351,7 +340,7 @@ canvas {
   background: radial-gradient(circle, rgba(var(--surface-rgb), 0.5), transparent 66%);
 }
 
-/* ③ 斜射光柱：纯 CSS 条纹，只呼吸 opacity，不碰滚动区，零 blur */
+/* �?斜射光柱：纯 CSS 条纹，只呼吸 opacity，不碰滚动区，零 blur */
 .bg-ray {
   position: absolute;
   top: -30%;
@@ -391,7 +380,7 @@ canvas {
   }
 }
 
-/* ④ 云带：页脚那一条发光的白雾，让页面底部"落地" */
+/* �?云带：页脚那一条发光的白雾，让页面底部"落地" */
 .bg-cloud {
   position: absolute;
   left: -12%;
@@ -417,7 +406,7 @@ canvas {
   }
 }
 
-/* ⑤ 细密网格纹理：日服官网画面上的那层十字网，极淡，只加质感 */
+/* �?细密网格纹理：日服官网画面上的那层十字网，极淡，只加质感 */
 .bg-hatch {
   position: absolute;
   inset: 0;
@@ -434,7 +423,7 @@ canvas {
   opacity: 0.5;
 }
 
-/* ⑥ 光点：用 transform 漂浮，不用 blur，零 GPU 压力 */
+/* �?光点：用 transform 漂浮，不�?blur，零 GPU 压力 */
 .bg-layer__spark {
   position: absolute;
   border-radius: 50%;
@@ -488,7 +477,7 @@ canvas {
   gap: clamp(0.875rem, 2.2vw, 1.25rem);
 }
 
-/* ---------------- 5. 侧栏 / 标签栏 ---------------- */
+/* ---------------- 5. 侧栏 / 标签�?---------------- */
 
 .sidenav {
   position: sticky;
@@ -562,7 +551,7 @@ canvas {
   transform: scale(0.98);
 }
 
-/* 活跃态：实心蓝 + 硬投影，当前位置一眼可见 */
+/* 活跃态：实心�?+ 硬投影，当前位置一眼可�?*/
 .nav-item[aria-current='page'] {
   background: var(--accent);
   color: #fff;
@@ -651,7 +640,7 @@ canvas {
   border: 2px solid var(--border);
   border-radius: var(--r-lg);
   padding: var(--pad-card);
-  /* 官方站那套三层叠边：内发丝 + 内白高光 + 外辉光。不是硬投影 */
+  /* 官方站那套三层叠边：内发�?+ 内白高光 + 外辉光。不是硬投影 */
   box-shadow: var(--frame);
   transition: transform var(--t-fast) ease, border-color var(--t-fast) ease,
     box-shadow var(--t-fast) ease;
@@ -677,7 +666,7 @@ canvas {
   overflow: hidden;
 }
 
-/* SpotlightCard：鼠标跟踪聚光 */
+/* SpotlightCard：鼠标跟踪聚�?*/
 .card--spot::before {
   content: '';
   position: absolute;
@@ -697,7 +686,7 @@ canvas {
   opacity: 1;
 }
 
-/* 卡片身份色：靠 4px 竖条区分，不靠整块换色 */
+/* 卡片身份色：�?4px 竖条区分，不靠整块换�?*/
 .card__head {
   display: flex;
   align-items: center;
@@ -737,7 +726,7 @@ canvas {
   font-weight: 800;
 }
 
-/* 身份色：每类卡片一个色相，全部走语义变量 */
+/* 身份色：每类卡片一个色相，全部走语义变�?*/
 .tone-quest {
   --card-tone: var(--accent);
 }
@@ -757,7 +746,7 @@ canvas {
   --card-tone: var(--accent-deep);
 }
 
-/* 斜杠饰带：区块之间的呼吸，代替横线 */
+/* 斜杠饰带：区块之间的呼吸，代替横�?*/
 .strap {
   flex: 1;
   height: 9px;
@@ -904,7 +893,7 @@ canvas {
 }
 .tag--english {
   background: rgba(var(--english-rgb), 0.22);
-  color: #0b6e96;
+  color: var(--arona-ink);
 }
 .tag--politics {
   background: rgba(var(--hoshino-rgb), 0.22);
@@ -912,7 +901,7 @@ canvas {
 }
 .tag--major {
   background: rgba(var(--major-rgb), 0.3);
-  color: #4e5c90;
+  color: var(--plana-ink);
 }
 .tag--done {
   background: rgba(var(--success-rgb), 0.16);
@@ -1002,7 +991,7 @@ canvas {
   overflow: hidden;
 }
 
-/* 官方站的进度条配色：青 → 蓝，填充自带青色辉光 */
+/* 官方站的进度条配色：�?�?蓝，填充自带青色辉光 */
 .progress__fill {
   height: 100%;
   border-radius: 999px;
@@ -1064,15 +1053,11 @@ canvas {
   grid-column: span 2;
 }
 
-/* ---------------- 8. 天空面板 + 倒计时 Hero ---------------- */
+/* ---------------- 8. 天空面板 + 倒计�?Hero ---------------- */
 
 /*
- * 天空面板 = 一块真的"天窗"，整页唯一的大面积饱和色。
- * 结构上分两半，这是对比度决定的设计：
- *   上半（天顶，深）：倒计时，白字压得住
- *   下半（地平线，浅）：作战状态条，用深色字
- * 所以 hero 是 grid + 两行，状态条作为第二个 grid 子项落在下半。
- */
+ * 天空面板 = 一块真�?天窗"，整页唯一的大面积饱和色�? * 结构上分两半，这是对比度决定的设计：
+ *   上半（天顶，深）：倒计时，白字压得�? *   下半（地平线，浅）：作战状态条，用深色�? * 所�?hero �?grid + 两行，状态条作为第二�?grid 子项落在下半�? */
 .sky-panel {
   position: relative;
   isolation: isolate;
@@ -1082,13 +1067,13 @@ canvas {
   box-shadow: var(--sh-sky), inset 0 1px 0 rgba(var(--surface-rgb), 0.9);
 }
 
-/* 天色：天顶 → 地平线，底部压一条发光云带（官方的招牌） */
+/* 天色：天�?�?地平线，底部压一条发光云带（官方的招牌） */
 .sky-panel::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
-  /* 天光只压在右下角（云那一侧），上 3/4 保持深色，白字才站得住 */
+  /* 天光只压在右下角（云那一侧），上 3/4 保持深色，白字才站得�?*/
   background: radial-gradient(85% 55% at 88% 100%, rgba(var(--surface-rgb), 0.8) 0%, transparent 62%),
     linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 34%, var(--sky-3) 58%, var(--sky-4) 82%, var(--bg) 100%);
 }
@@ -1116,7 +1101,7 @@ canvas {
 
 .countdown {
   position: relative;
-  /* 自成层叠上下文：光环的 z-index:-1 才既能盖住天色、又垫在数字后面 */
+  /* 自成层叠上下文：光环�?z-index:-1 才既能盖住天色、又垫在数字后面 */
   isolation: isolate;
   z-index: 1;
   display: flex;
@@ -1155,8 +1140,7 @@ canvas {
   vertical-align: 0.35em;
 }
 
-/* 小字在渐变的浅色段上会失守，所以自己带一层深色底。
-   这是天空面板上唯一允许的"贴片"，只为可读性存在。 */
+/* 小字在渐变的浅色段上会失守，所以自己带一层深色底�?   这是天空面板上唯一允许�?贴片"，只为可读性存在�?*/
 .countdown__meta {
   display: flex;
   flex-wrap: wrap;
@@ -1214,7 +1198,7 @@ canvas {
   margin-top: clamp(1rem, 3vw, 1.75rem);
   padding: 0.625rem 1rem;
   border-radius: 999px;
-  /* 落在天色最亮的那一条上，所以自己带一层底，把字压回可读 */
+  /* 落在天色最亮的那一条上，所以自己带一层底，把字压回可�?*/
   background: var(--strap-bg);
   border: 1px solid var(--strap-bd);
   font-size: 0.8125rem;
@@ -1275,8 +1259,7 @@ canvas {
 .halo {
   position: absolute;
   border-radius: 50%;
-  /* 官方的环不是正圆：是被透视压扁的椭圆，环身是"发光的带"而不是描边圆。
-     压扁交给容器，旋转交给内层，两者互不干扰。 */
+  /* 官方的环不是正圆：是被透视压扁的椭圆，环身�?发光的带"而不是描边圆�?     压扁交给容器，旋转交给内层，两者互不干扰�?*/
   transform: skewX(-16deg) scaleY(0.3);
   pointer-events: none;
   z-index: -1;
@@ -1287,7 +1270,7 @@ canvas {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  /* conic 的缺口做出"环上有断口"；mask 把圆盘挖成一条环带 */
+  /* conic 的缺口做�?环上有断�?；mask 把圆盘挖成一条环�?*/
   background: conic-gradient(
     from 0deg,
     rgba(var(--surface-rgb), 0.95) 0deg 58deg,
@@ -1312,7 +1295,7 @@ canvas {
   opacity: 0.5;
 }
 
-/* 环会横穿数字，所以压低整体不透明度：它是氛围，不能跟倒计时抢读 */
+/* 环会横穿数字，所以压低整体不透明度：它是氛围，不能跟倒计时抢�?*/
 .halo {
   opacity: 0.62;
 }
@@ -1328,7 +1311,7 @@ canvas {
   }
 }
 
-/* ---------------- 11. 角色与台词 ---------------- */
+/* ---------------- 11. 角色与台�?---------------- */
 
 .mascot {
   width: var(--mascot-size, 96px);
@@ -1360,7 +1343,7 @@ canvas {
 }
 
 .mascot--hero {
-  /* 上限 132px：SVG 是 128×160 的竖长比例，再大就把天空面板撑高了 */
+  /* 上限 132px：SVG �?128×160 的竖长比例，再大就把天空面板撑高�?*/
   --mascot-size: clamp(76px, 12vw, 132px);
 }
 
@@ -1387,7 +1370,7 @@ canvas {
   }
 }
 
-/* 眨眼：极轻，不打扰阅读 */
+/* 眨眼：极轻，不打扰阅�?*/
 .ch__eyes {
   animation: blink 6.5s ease-in-out infinite;
   transform-origin: 64px 70px;
@@ -1425,24 +1408,24 @@ canvas {
 /* 角色气泡：边框走角色色，名字色单独给一个够深的变体 */
 .speech--hoshino {
   border-color: rgba(var(--hoshino-rgb), 0.55);
-  --speech-who: #9c3f6b;
+  --speech-who: var(--hoshino-ink);
 }
 .speech--arona {
   border-color: rgba(var(--english-rgb), 0.55);
-  --speech-who: #0b6e96;
+  --speech-who: var(--arona-ink);
 }
 .speech--plana {
   border-color: rgba(var(--major-rgb), 0.6);
-  --speech-who: #4e5c90;
+  --speech-who: var(--plana-ink);
 }
 
-/* 角色名标签：压深到 4.5:1，粉色标注也不能靠"浅"来表达 */
+/* 角色名标签：压深�?4.5:1，粉色标注也不能�?�?来表�?*/
 .speech__who {
   display: block;
   font-size: 0.8125rem;
   font-weight: 800;
   letter-spacing: 0.03em;
-  color: var(--speech-who, #9c3f6b);
+  color: var(--speech-who, var(--hoshino-ink));
   margin-bottom: 0.15rem;
 }
 
@@ -1480,7 +1463,7 @@ canvas {
   margin-top: 0.5rem;
 }
 
-/* ---------------- 12. 委托单 ---------------- */
+/* ---------------- 12. 委托�?---------------- */
 
 .quest {
   position: relative;
@@ -1491,7 +1474,7 @@ canvas {
   padding: 0.5rem 0.625rem;
   border-radius: var(--r-md);
   border: 2px solid transparent;
-  /* 官方站实测的招牌交互：列表行向左滑 8px，左侧身份条同时被蓝色填满 */
+  /* 官方站实测的招牌交互：列表行向左�?8px，左侧身份条同时被蓝色填�?*/
   transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease,
     transform var(--t-fast) ease;
 }
@@ -1636,7 +1619,7 @@ canvas {
   height: 17px;
 }
 
-/* 用于把「→」翻成「←」，避免再画一个图标 */
+/* 用于把「→」翻成「←」，避免再画一个图�?*/
 .flip-x {
   transform: scaleX(-1);
 }
@@ -1715,7 +1698,7 @@ canvas {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------------- 14. 番茄钟 ---------------- */
+/* ---------------- 14. 番茄�?---------------- */
 
 .pomo {
   display: grid;
@@ -1804,7 +1787,7 @@ canvas {
   box-shadow: 0 3px 0 var(--accent-deep);
 }
 
-/* ---------------- 15. 热力图 ---------------- */
+/* ---------------- 15. 热力�?---------------- */
 
 .heatmap {
   display: grid;
@@ -1969,7 +1952,7 @@ canvas {
   box-shadow: 0 4px 0 var(--accent-deep);
 }
 
-/* ---------------- 17. 错题本 / 目标看板 ---------------- */
+/* ---------------- 17. 错题�?/ 目标看板 ---------------- */
 
 .item {
   display: grid;
@@ -2149,7 +2132,7 @@ canvas {
   color: var(--accent);
 }
 
-/* ---------------- 19. 入场与滚动 reveal ---------------- */
+/* ---------------- 19. 入场与滚�?reveal ---------------- */
 
 @keyframes rise-in {
   from {
@@ -2187,7 +2170,7 @@ canvas {
   opacity: 1;
 }
 
-/* ---------------- 20. 响应式 ---------------- */
+/* ---------------- 20. 响应�?---------------- */
 
 @media (max-width: 1000px) {
   .shell {
@@ -2195,8 +2178,7 @@ canvas {
     padding-bottom: 0;
   }
 
-  /* 平板上把侧栏收成「品牌行 + 导航行」的顶栏。
-     两行而不是一行，是为了让 8 个导航项一次全部可见，不用横滑。 */
+  /* 平板上把侧栏收成「品牌行 + 导航行」的顶栏�?     两行而不是一行，是为了让 8 个导航项一次全部可见，不用横滑�?*/
   .sidenav {
     position: static;
     display: flex;
@@ -2266,7 +2248,7 @@ canvas {
   .hero {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
-    /* 单列时别让 countdown / 角色 / 状态条各自撑成一整行 */
+    /* 单列时别�?countdown / 角色 / 状态条各自撑成一整行 */
     align-content: start;
   }
 
@@ -2303,7 +2285,7 @@ canvas {
     gap: 0.875rem;
   }
 
-  /* 侧栏在手机上变成底部标签栏 */
+  /* 侧栏在手机上变成底部标签�?*/
   .sidenav {
     position: fixed;
     z-index: 50;
@@ -2370,11 +2352,11 @@ canvas {
   }
 
   .mascot--hero {
-    /* SVG 是 128×160 的竖长比例，所以 76px 宽实际只占约 95px 高 */
+    /* SVG �?128×160 的竖长比例，所�?76px 宽实际只占约 95px �?*/
     --mascot-size: 76px;
   }
 
-  /* 手机上把角色与等级标签并成一行，别让天空面板被撑高 */
+  /* 手机上把角色与等级标签并成一行，别让天空面板被撑�?*/
   .hero__side {
     flex-direction: row;
     align-items: flex-end;
@@ -2387,7 +2369,7 @@ canvas {
     font-size: clamp(4rem, 22vw, 6rem);
   }
 
-  /* 小屏省掉常驻光环动画，省电也省得画面挤 */
+  /* 小屏省掉常驻光环动画，省电也省得画面�?*/
   .halo {
     display: none;
   }
@@ -2557,7 +2539,7 @@ canvas {
   }
 }
 
-/* 不支持 backdrop-filter 时给个不透明兜底，避免底栏糊成一片 */
+/* 不支�?backdrop-filter 时给个不透明兜底，避免底栏糊成一�?*/
 @supports not (backdrop-filter: blur(10px)) {
   :root {
     --glass: var(--surface);
