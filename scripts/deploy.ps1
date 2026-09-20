@@ -157,12 +157,6 @@ if (-not $staged) {
 # ---------- 5. 推送 ----------
 Write-Step 5 '推送到 GitHub'
 
-# 运行时变量诊断（排查变量被意外替换）
-try {
-  $diag = "Username=[$GitHubUser]`nRepo=[$Repo]`nenvUSERNAME=[$env:USERNAME]`nPSBoundParameters=[$(($PSBoundParameters.Keys) -join ',')]`nargs=[$($args -join ' ')]`n"
-  [System.IO.File]::WriteAllText("$env:TEMP\deploy-diag.txt", $diag, (New-Object System.Text.UTF8Encoding($false)))
-} catch { }
-
 # 先探测代理：国内直连 github.com 经常被重置，而 git / PowerShell 不会自动读系统代理。
 # 这里把系统代理读出来，只在本次 git 命令上临时套用，不写进任何配置文件。
 function Get-GitProxyArgs {
@@ -287,8 +281,10 @@ Write-Host '======================================================' -ForegroundC
 Write-Host ''
 Write-Host " 1. 打开 https://github.com/$GitHubUser/$Repo/settings/pages"
 Write-Host ' 2. 在 Build and deployment 的 Source 里，选 GitHub Actions'
-Write-Host " 3. 打开 https://github.com/$GitHubUser/$Repo/actions 看部署进度"
-Write-Host '    等它变成绿色对勾（约 1 分钟）'
+Write-Host " 3. 如果 Actions 里上次的部署是红的（配置 Pages 那步失败），"
+Write-Host "    打开 https://github.com/$GitHubUser/$Repo/actions 点进那次运行，"
+Write-Host '    右上角 Re-run all jobs 重跑一次；或者再跑一遍本脚本推一次空提交。'
+Write-Host ' 4. 等它变成绿色对勾（约 1 分钟）'
 Write-Host ''
 Write-Host ' 你的网站地址将是：' -NoNewline
 Write-Host "https://$GitHubUser.github.io/$Repo/" -ForegroundColor Cyan
