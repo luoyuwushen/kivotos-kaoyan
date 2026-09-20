@@ -29,6 +29,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+Write-Host "[探针] Username=[$Username] Repo=[$Repo] envUSERNAME=[$env:USERNAME]" -ForegroundColor Magenta
+
 function Write-Step($n, $text) {
   Write-Host ''
   Write-Host "=== [$n] $text ===" -ForegroundColor Cyan
