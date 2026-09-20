@@ -187,8 +187,10 @@ $remoteUrl = "https://github.com/$Username/$Repo.git"
 # 踩过的坑：用户把本机 git 的占位值（user.name=FPGA-Dev）当成 GitHub 用户名输进来，
 # 结果一路推到不存在的地址才报错，白折腾一轮。这里提前查一次并把话说清楚。
 function Test-GitHubRepo {
-  param([string]$Owner, [string]$Name, [string[]]$ProxyArgs)
-  $url = "https://api.github.com/repos/$Owner/$Name"
+  # 参数名别用 $Name —— 它和 PowerShell 的自动变量 $Name 冲突，
+  # 会让 URL 悄悄拼错成外部变量的值（这个坑真的踩过一次）。
+  param([string]$RepoOwner, [string]$RepoName, [string[]]$ProxyArgs)
+  $url = "https://api.github.com/repos/$RepoOwner/$RepoName"
   $curlArgs = @('-s', '-o', 'NUL', '-w', '%{http_code}', '-m', '20', $url)
   $proxyUrl = ($ProxyArgs | Where-Object { $_ -like 'https.proxy=*' } | Select-Object -First 1)
   if ($proxyUrl) { $curlArgs = @('--proxy', ($proxyUrl -replace '^https\.proxy=', '')) + $curlArgs }
@@ -206,7 +208,7 @@ function Test-GitHubRepo {
 }
 
 Write-Host '  正在确认仓库是否存在…' -ForegroundColor DarkGray
-$repoCode = Test-GitHubRepo -Owner $Username -Name $Repo -ProxyArgs $gitProxy
+$repoCode = Test-GitHubRepo -RepoOwner $Username -RepoName $Repo -ProxyArgs $gitProxy
 
 switch ($repoCode) {
   '200' { Write-Ok "仓库存在：https://github.com/$Username/$Repo" }
