@@ -151,6 +151,12 @@ if (-not $staged) {
 # ---------- 5. 推送 ----------
 Write-Step 5 '推送到 GitHub'
 
+# 运行时变量诊断（排查变量被意外替换）
+try {
+  $diag = "Username=[$Username]`nRepo=[$Repo]`nenvUSERNAME=[$env:USERNAME]`nPSBoundParameters=[$(($PSBoundParameters.Keys) -join ',')]`nargs=[$($args -join ' ')]`n"
+  [System.IO.File]::WriteAllText("$env:TEMP\deploy-diag.txt", $diag, (New-Object System.Text.UTF8Encoding($false)))
+} catch { }
+
 # 先探测代理：国内直连 github.com 经常被重置，而 git / PowerShell 不会自动读系统代理。
 # 这里把系统代理读出来，只在本次 git 命令上临时套用，不写进任何配置文件。
 function Get-GitProxyArgs {
