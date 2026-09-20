@@ -211,6 +211,7 @@ function Test-GitHubRepo {
 
 Write-Host '  正在确认仓库是否存在…' -ForegroundColor DarkGray
 $repoCode = Test-GitHubRepo -RepoOwner $Username -RepoName $Repo -ProxyArgs $gitProxy
+Write-Host "[探针] url=https://api.github.com/repos/$Username/$Repo code=[$repoCode] proxyCount=$(($gitProxy | Measure-Object).Count)" -ForegroundColor Magenta
 
 switch ($repoCode) {
   '200' { Write-Ok "仓库存在：https://github.com/$Username/$Repo" }
