@@ -44,22 +44,49 @@ const check = (name, ok, detail = '') => {
 }
 const info = (t) => console.log(`  ·  ${t}`)
 
-/* ---------------- 读产物里的配置（客户端真正会用的那份） ---------------- */
+/* ---------------- 拿到目标项目（两种来源） ---------------- */
 const { readFileSync } = await import('node:fs')
-const envText = ['\.env', '.env.local'].map((f) => {
+
+/**
+ * 项目地址有两种给法：
+ *   · --url / --anon 直接给（想测**线上通用模板**时用这种：线上没烘焙配置，
+ *     需要在测试页面的 localStorage 里塞一份配置）
+ *   · 本机 .env.local / .env（想测**本地烘焙构建**时用这种）
+ */
+function readEnvFileQuiet(file) {
   try {
-    return readFileSync(f, 'utf8')
+    return Object.fromEntries(
+      readFileSync(file, 'utf8')
+        .split(/\r?\n/)
+        .map((line) => /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line))
+        .filter(Boolean)
+        .map((m) => [m[1], m[2].replace(/^["']|["']$/g, '')])
+    )
   } catch {
-    return ''
+    return {}
   }
-}).join('\n')
-const PROJ = (/VITE_SUPABASE_URL\s*=\s*(\S+)/.exec(envText)?.[1] || '').replace(/\/+$/, '')
-const ANON = /VITE_SUPABASE_ANON_KEY\s*=\s*(\S+)/.exec(envText)?.[1] || ''
+}
+const localEnv = { ...readEnvFileQuiet('.env'), ...readEnvFileQuiet('.env.local') }
+const PROJ = (arg('url') || process.env.VITE_SUPABASE_URL || localEnv.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
+const ANON = arg('anon') || process.env.VITE_SUPABASE_ANON_KEY || localEnv.VITE_SUPABASE_ANON_KEY || ''
+/** 显式给了 --url/--anon 时，需要在页面里自己塞一份配置（线上站点就是这样） */
+const INJECT_CONFIG = Boolean(arg('url'))
+
 if (!PROJ || !ANON) {
-  console.log('读不到 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY —— 这个脚本需要构建时烘焙了配置（.env.local）。')
+  console.log(`读不到项目地址与 anon key。两种给法：
+
+  # 测线上通用模板（线上没烘焙配置，脚本会自己往页面里塞一份）
+  node scripts/test-cloud-e2e.mjs --admin-token sbp_xxx \\
+    --url https://你的项目.supabase.co --anon eyJhbGciOi... --proxy http://127.0.0.1:7897
+
+  # 测本地烘焙构建（依赖 .env.local 里已经写好 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY）
+  node scripts/test-cloud-e2e.mjs --admin-token sbp_xxx --proxy http://127.0.0.1:7897
+`)
   process.exit(1)
 }
+info(`目标站点：${BASE}`)
 info(`目标项目：${PROJ}`)
+info(`配置来源：${INJECT_CONFIG ? '命令行传入（会在页面里注入）' : '构建期烘焙（.env.local）'}`)
 info(`代理：${PROXY || '（不用代理）'}`)
 
 const REF = new URL(PROJ).hostname.split('.')[0]
@@ -161,11 +188,13 @@ async function newDevice(seed) {
     const text = m.text()
     if (m.type() === 'warning' && (text.includes('[cloud]') || text.includes('[settings:debug]'))) logs.push(text)
   })
-  await page.addInitScript(({ key, state }) => {
+  await page.addInitScript(({ key, state, inject, cfg }) => {
     // 打开 cloud.js 的同步判定日志，方便定位「为什么没同步」
     localStorage.setItem('kivotos-kaoyan-cloud-debug', '1')
     if (state) localStorage.setItem(key, JSON.stringify(state))
-  }, { key: STORE_KEY, state: seed })
+    // 线上通用模板没有烘焙配置，测试时在这里补一份（和真实用户在设置页填的效果一样）
+    if (inject) localStorage.setItem('kivotos-kaoyan-cloud-cfg-v1', JSON.stringify(cfg))
+  }, { key: STORE_KEY, state: seed, inject: INJECT_CONFIG, cfg: { url: PROJ, anonKey: ANON } })
   return { context, page, errors, logs }
 }
 
