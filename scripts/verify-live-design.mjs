@@ -246,19 +246,31 @@ const cloud = await page.evaluate(() => {
     dotColor: dcs?.backgroundColor || '',
     dotRadius: dcs?.borderRadius || '',
     borderWidth: cs?.borderTopWidth || '',
+    // 三种界面状态：① 还没配置（本机构建带 .env.local 时不会有）
+    //              ② 配置了、未登录 → 登录表单  ③ 已登录 → 账号面板
     configForm: Boolean(card?.querySelector('[data-testid="cloud-config-form"]')),
+    loginForm: Boolean(card?.querySelector('[data-testid="cloud-login"]')),
+    accountPanel: Boolean(card?.querySelector('[data-testid="cloud-account"]')),
     guideButton: /怎么申请/.test(card?.textContent || ''),
-    // 未配置时不应该有任何指向 supabase 的请求
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
   }
 })
+/** 已经配过（构建期烘焙或本机存过）时，界面就不该再给配置表单 */
+const alreadyConfigured = cloud.loginForm || cloud.accountPanel
+
 check('设置页有「云端同步」卡片', cloud.hasCard)
 check('云端状态徽标已渲染', cloud.hasStatus && cloud.dotColor !== '', `${cloud.state} / ${cloud.dotColor}`)
 check('状态圆点是圆形（半径 50%）', cloud.dotRadius === '50%', cloud.dotRadius)
 check('状态徽标走 token 边框（1px）', cloud.borderWidth === '1px', cloud.borderWidth)
-check('未配置时给出项目配置表单', cloud.configForm, cloud.configForm ? '' : '没看到 cloud-config-form')
-check('未配置时给出「怎么申请」引导', cloud.guideButton)
 check('设置页在配置缺失时无横向溢出', cloud.overflow <= 2, `${cloud.overflow}px`)
+if (alreadyConfigured) {
+  check('已配置时进入登录/账号流程（不再要求填项目）',
+    cloud.loginForm || cloud.accountPanel,
+    cloud.accountPanel ? '账号面板' : '登录表单')
+} else {
+  check('未配置时给出项目配置表单', cloud.configForm, cloud.configForm ? '' : '没看到 cloud-config-form')
+  check('未配置时给出「怎么申请」引导', cloud.guideButton)
+}
 await page.screenshot({ path: join(OUT, 'live-settings-cloud.png') })
 
 /* ---------- 6. 打印样式不该崩 ---------- */
