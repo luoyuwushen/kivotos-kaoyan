@@ -121,9 +121,19 @@
    > 用这两招确认：① 新建查询跑 `select count(*) from pg_policies where tablename='kaoyan_data';`
    > ② 或看左侧 **Table Editor** 里有没有 `kaoyan_data` 表。
    > 建表脚本可以重复执行（`create table if not exists` + 策略先删再建），多跑几次不会坏。
-   > 如果 SQL Editor 整条路都不行，还可以绕开它：
-   > `node scripts/apply-schema.mjs --db-host db.xxxx.supabase.co --db-pass '数据库密码'`
-   > （连 Postgres 直连，建完自动自检表/RLS/策略/触发器）
+   >
+   > **SQL Editor 整条路都走不通时，有两条绕行方案**（都在本机命令行跑，不经过浏览器）：
+   >
+   > ```powershell
+   > # 方式一：用个人访问令牌调官方 Management API（推荐，api.supabase.com 在大陆可直连）
+   > #   token 在 https://supabase.com/dashboard/account/tokens 生成，用完记得 Revoke
+   > node scripts/apply-schema-api.mjs --token sbp_xxxxxxxx --ref 你的项目ref
+   >
+   > # 方式二：直连数据库执行（需要建项目时设的数据库密码）
+   > node scripts/apply-schema.mjs --db-host db.xxxx.supabase.co --db-pass '数据库密码'
+   > ```
+   >
+   > 两个脚本都会在建完之后逐条自检：表在不在、RLS 开没开、4 条策略、时间戳触发器。
 3. 进 **Authentication → Sign In / Providers → Email**，确认邮箱登录是开着的。
    测试阶段建议顺手关掉 **Confirm email**，省得每次注册都要去点邮件。
 
@@ -432,7 +442,14 @@ npm run test:scores # 15 项分数满分规则测试（需先跑 preview）
 npm run test:cloud  # 49 项云端同步测试：自带一个「假 Supabase」，会真的校验 JWT、
                     # 真的执行 RLS（越权写入返回 403、跨用户查询返回空集）——不用联网、不用花钱
 npm run supabase:setup   # 配置你自己的 Supabase 项目（写 .env.local）并立刻跑真机联调
-npm run test:cloud:live  # 真机联调：直接打你真实的 Supabase，验证建表 / RLS / 隔离 / 清理
+npm run test:cloud:live  # 真机联调：直接打你真实的 Supabase，验证建表 / RLS / 越权拦截 / 隔离 / 清理
+                         #   项目开着 Confirm email 时，加 --admin-token sbp_xxx 让脚本用 Admin API
+                         #   直接建「已确认」的测试账号（绕开发信额度限制），跑完连账号一起删掉
+node scripts/test-cloud-e2e.mjs --admin-token sbp_xxx --proxy http://127.0.0.1:7897
+                         # 浏览器端到端（打真项目、点真界面）：登录 → 上传 → 换全新设备登录
+                         #   → 自动拉回数据 → 换账号验证隔离。这是「跨设备同步真的能用」的实证
+node scripts/apply-schema-api.mjs --token sbp_xxx --ref 你的ref
+                         # 用 Management API 执行建表 SQL（SQL Editor 走不通时的绕行方案）
 ```
 
 **设计相关的三个脚本**（改配色 / 改样式之后建议都跑一遍）：

@@ -21,6 +21,7 @@
 
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { splitStatements } from './lib/sql-split.mjs'
 
 const require = createRequire(import.meta.url)
 
@@ -64,12 +65,9 @@ try {
 
 const sql = readFileSync(sqlFile, 'utf8')
 
-// 把 SQL 拆成一条条执行：整段丢进去会被包成一个事务，
-// 拆开跑输出更清楚，也有利于定位到底哪一条出问题。
-const statements = sql
-  .split(/;\s*(?:\r?\n|$)/)
-  .map((s) => s.trim())
-  .filter((s) => s && !s.split('\n').every((line) => line.trim().startsWith('--')))
+// 把 SQL 拆成一条条执行：整段丢进去不方便定位问题，拆开的输出更清楚。
+// 注意必须用认识 $$ 函数体的切分器 —— 见 scripts/lib/sql-split.mjs 里的说明。
+const statements = splitStatements(sql)
 
 console.log(`\n=== 连接 ${host}:${port}/${dbName}（user=${user}）===`)
 console.log(`将执行 ${statements.length} 条语句，来自 ${sqlFile}\n`)

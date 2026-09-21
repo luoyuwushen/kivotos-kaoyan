@@ -18,6 +18,7 @@
 
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { splitStatements, statementLabel } from './lib/sql-split.mjs'
 
 function arg(name, fallback = '') {
   const i = process.argv.indexOf(`--${name}`)
@@ -42,112 +43,6 @@ ref 就是项目 URL 里那一段：https://<ref>.supabase.co
 
 const API = 'https://api.supabase.com/v1'
 
-/**
- * 把 SQL 文件切成一条条语句。
- *
- * 这里踩过一个真实的坑，必须记下来：Management API 一次只接受**一条**语句，
- * 所以要把文件拆开送。但天真的「按分号 split」会把 PostgreSQL 的
- * `$$ ... $$` 函数体切碎 —— 函数体里的分号被当成语句结尾，
- * 结果送出去的是半截 CREATE FUNCTION，接口直接回 401/400，
- * 让人以为是权限问题，其实是自己的切分错了。
- * 所以这里必须认识美元引用（含 $tag$ 形式）和普通字符串字面量。
- */
-function splitStatements(sql) {
-  const out = []
-  let current = ''
-  let i = 0
-  let dollarTag = null // 正在 $$…$$ 或 $tag$…$tag$ 里
-  let inSingle = false // 正在 '...' 里
-  let inLineComment = false
-  let inBlockComment = false
-
-  while (i < sql.length) {
-    const ch = sql[i]
-    const next = sql[i + 1]
-
-    if (inLineComment) {
-      current += ch
-      if (ch === '\n') inLineComment = false
-      i++
-      continue
-    }
-    if (inBlockComment) {
-      current += ch
-      if (ch === '*' && next === '/') {
-        current += next
-        i += 2
-        inBlockComment = false
-        continue
-      }
-      i++
-      continue
-    }
-    if (inSingle) {
-      current += ch
-      if (ch === "'") {
-        if (next === "'") {
-          current += next
-          i += 2
-          continue
-        }
-        inSingle = false
-      }
-      i++
-      continue
-    }
-    if (dollarTag) {
-      if (sql.startsWith(dollarTag, i)) {
-        current += dollarTag
-        i += dollarTag.length
-        dollarTag = null
-        continue
-      }
-      current += ch
-      i++
-      continue
-    }
-
-    if (ch === '-' && next === '-') {
-      inLineComment = true
-      current += ch + next
-      i += 2
-      continue
-    }
-    if (ch === '/' && next === '*') {
-      inBlockComment = true
-      current += ch + next
-      i += 2
-      continue
-    }
-    if (ch === "'") {
-      inSingle = true
-      current += ch
-      i++
-      continue
-    }
-    if (ch === '$') {
-      const m = /^\$[A-Za-z_]*\$/.exec(sql.slice(i))
-      if (m) {
-        dollarTag = m[0]
-        current += dollarTag
-        i += dollarTag.length
-        continue
-      }
-    }
-    if (ch === ';') {
-      out.push(current.trim())
-      current = ''
-      i++
-      continue
-    }
-    current += ch
-    i++
-  }
-  if (current.trim()) out.push(current.trim())
-
-  // 只由注释组成的片段不算语句
-  return out.filter((s) => s && !s.split('\n').every((line) => line.trim().startsWith('--')))
-}
 
 async function api(path, { method = 'GET', body = null } = {}) {
   const res = await fetch(`${API}${path}`, {
@@ -186,9 +81,7 @@ console.log(`  执行 ${sqlFile}：${statements.length} 条语句\n`)
 
 let execFailed = 0
 for (const [i, statement] of statements.entries()) {
-  const label = (statement.split('\n').find((l) => l.trim() && !l.trim().startsWith('--')) || statement)
-    .trim()
-    .slice(0, 66)
+  const label = statementLabel(statement)
   const r = await api(`/projects/${ref}/database/query`, { method: 'POST', body: { query: statement } })
   if (r.status >= 400) {
     console.error(`  ✗ [${i + 1}/${statements.length}] ${label}`)
