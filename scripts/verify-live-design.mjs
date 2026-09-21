@@ -224,7 +224,44 @@ check('手机端无横向溢出', mob.overflow <= 2, `${mob.overflow}px`)
 check('手机端省掉常驻光环动画', mob.haloHidden === 'none', mob.haloHidden)
 await page.screenshot({ path: join(OUT, 'live-mobile-home.png') })
 
-/* ---------- 5. 打印样式不该崩 ---------- */
+/* ---------- 5. 云端同步卡片（路径 2）----------
+   线上站点是「使用者自己填项目」，所以这里应该看到配置引导，
+   而且状态徽标的配色必须走 DESIGN.md 的 token，不能是随手写的颜色。 */
+await page.setViewportSize({ width: 1440, height: 1000 })
+await page.emulateMedia({ media: 'screen' })
+await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(1200)
+const cloud = await page.evaluate(() => {
+  const card = [...document.querySelectorAll('main section.card')].find((s) =>
+    s.textContent.includes('云端同步')
+  )
+  const status = card?.querySelector('.cloud-status')
+  const dot = status?.querySelector('.cloud-status__dot')
+  const cs = status ? getComputedStyle(status) : null
+  const dcs = dot ? getComputedStyle(dot) : null
+  return {
+    hasCard: Boolean(card),
+    hasStatus: Boolean(status),
+    state: status?.dataset.state || '',
+    dotColor: dcs?.backgroundColor || '',
+    dotRadius: dcs?.borderRadius || '',
+    borderWidth: cs?.borderTopWidth || '',
+    configForm: Boolean(card?.querySelector('[data-testid="cloud-config-form"]')),
+    guideButton: /怎么申请/.test(card?.textContent || ''),
+    // 未配置时不应该有任何指向 supabase 的请求
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+  }
+})
+check('设置页有「云端同步」卡片', cloud.hasCard)
+check('云端状态徽标已渲染', cloud.hasStatus && cloud.dotColor !== '', `${cloud.state} / ${cloud.dotColor}`)
+check('状态圆点是圆形（半径 50%）', cloud.dotRadius === '50%', cloud.dotRadius)
+check('状态徽标走 token 边框（1px）', cloud.borderWidth === '1px', cloud.borderWidth)
+check('未配置时给出项目配置表单', cloud.configForm, cloud.configForm ? '' : '没看到 cloud-config-form')
+check('未配置时给出「怎么申请」引导', cloud.guideButton)
+check('设置页在配置缺失时无横向溢出', cloud.overflow <= 2, `${cloud.overflow}px`)
+await page.screenshot({ path: join(OUT, 'live-settings-cloud.png') })
+
+/* ---------- 6. 打印样式不该崩 ---------- */
 await page.setViewportSize({ width: 1440, height: 1000 })
 await page.emulateMedia({ media: 'print' })
 await page.waitForTimeout(300)

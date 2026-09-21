@@ -5,7 +5,19 @@
 import './styles/main.css'
 
 import { el, mount, toDateKey, examCountdown } from './lib/utils.js'
-import { state, subscribe, commit, stats, overdueCount, dueMistakes, rolloverOverdue, generatePhases, updateProfile } from './lib/store.js'
+import {
+  state,
+  subscribe,
+  commit,
+  stats,
+  overdueCount,
+  dueMistakes,
+  rolloverOverdue,
+  generatePhases,
+  updateProfile,
+  connectCloud
+} from './lib/store.js'
+import { cloudMeta, currentUser, runSync } from './lib/cloud.js'
 import { icon, brandMark } from './components/icons.js'
 import { toast, enableSpotlight, observeReveals, openModal, REDUCED } from './components/ui.js'
 import { appFooter } from './components/footer.js'
@@ -294,6 +306,27 @@ function celebrate() {
   setTimeout(() => host.remove(), 1600)
 }
 
+/* ---------------- 云端同步（可选后端） ---------------- */
+
+/**
+ * 启动时的云端对账。三条原则：
+ *   1. 没登录 / 没配置 → 什么都不做，全站照旧跑在本地；
+ *   2. 已经在设置页确认过同步方向（initialized）→ 才会自动拉取；
+ *   3. 出现冲突（两边都有新改动）→ 只提示，绝不自动覆盖任何一边。
+ */
+async function startCloudSync() {
+  const user = await currentUser()
+  if (!user) return
+  if (!cloudMeta().initialized) return // 等用户在设置页做完首次选择
+
+  const result = await runSync({ auto: true })
+  if (result.action === 'pull' && result.ok) {
+    toast('已从云端同步最新数据', { kind: 'ok', iconName: 'cloud' })
+  } else if (result.action === 'conflict') {
+    toast('云端与本机都有新改动，去「设置 → 云端同步」选一边', { kind: 'info', ms: 6000, iconName: 'cloud' })
+  }
+}
+
 /* ---------------- 初始化 ---------------- */
 
 function boot() {
@@ -312,6 +345,11 @@ function boot() {
 
   enableSpotlight(document.body)
   installShortcuts()
+
+  // 云端同步（可选后端）：把数据层接上去，然后在后台悄悄对一次账。
+  // 没配置 Supabase 的话，整个函数会立刻返回，一次网络请求都不会发。
+  connectCloud()
+  startCloudSync()
 
   if (!state.phases.length) {
     // 第一次打开：把阶段计划先排好，首页立刻有内容

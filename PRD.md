@@ -53,9 +53,13 @@
 - [x] AI API 自定义配置：生成阶段计划、从目录推断章节时长（可选，不配置也能用）
 - [x] 错题本 / 知识点清单 + 掌握程度
 - [x] 多设备同步：JSON 文件导入导出（手动，**已完成**）
-- [ ] **可选 GitHub Gist 自动同步**（未实现）
-      —— 现状：`state.settings.sync = { gistToken, gistId }` 两个字段已预留，但**没有任何读写逻辑**。
-      设计与可直接复制的代码见 [`docs/后端与多用户方案.md`](docs/后端与多用户方案.md) 路径 1。
+- [x] **真正的后端：Supabase 云端同步**（多用户 + 换设备自动同步，**已完成**）
+      —— 邮箱登录（魔法链接 / 密码）、一张表 + 行级安全隔离、
+      本地改动自动上传、新设备自动拉取、冲突交给人选、可删云端数据。
+      代码 `src/lib/cloud.js`、建表 `docs/supabase-schema.sql`、
+      界面「设置 → 云端同步」、测试 `npm run test:cloud`（49 项）与 `npm run test:cloud:live`。
+- [ ] **可选 GitHub Gist 自动同步**（未实现，且**已被上面的 Supabase 取代**，
+      不再计划做；`state.settings.sync` 两个预留字段保留只是为了老备份兼容）
 - [x] 深色模式
 - [x] 键盘快捷键 / 命令面板
 - [x] 自定义角色图（放在 `public/characters/*.png`，由设置里的开关启用）
@@ -64,21 +68,22 @@
 
 **已完成（可验收）**：倒计时、每日委托、阶段排期、教材目录导入、番茄钟与热力图、
 错题本、目标看板、勋章与等级、星野台词、三角色挂件、AI 接口接入、深色模式、
-快捷键与命令面板、JSON 备份与恢复、三端适配、GitHub Pages 自动部署。
+快捷键与命令面板、JSON 备份与恢复、三端适配、GitHub Pages 自动部署、
+**Supabase 云端同步（可选后端：邮箱登录 + 行级安全隔离 + 自动推拉 + 冲突交给人选）**。
 
 **待完成 / 待你处理**：
 
 | 项 | 说明 | 优先级 |
 |----|------|--------|
 | 初试日期校准 | 默认 2027-12-26 是估算值，教育部通知后需在设置里改正 | 高 |
-| 定期备份 | 数据只在本地浏览器，建议每周导出一次 JSON | 高 |
+| 定期备份 | 没配后端时数据只在本地浏览器，建议每周导出一次 JSON | 高 |
 | 自定义角色图 | 想换成自己的 Q 版图，需放图片 + 开开关 | 中 |
-| GitHub Gist 自动同步 | 设计已完成、代码未写，能覆盖「手机 ↔ 电脑」 | 中 |
-| 真后端（多用户） | 仅当想给同学各自使用时才需要，方案见文档 | 低 |
+| 云端后端开通 | 代码已就绪；需要你去 supabase.com 建一个免费项目并执行建表 SQL（约 10 分钟） | 中 |
 
 ## 非目标（明确不做）
-- ❌ 不做后端服务、不做账号系统、不存任何用户隐私数据到服务器。
-      （例外：若将来接入 Supabase，数据存在你自己的 Supabase 项目里，且靠行级安全隔离到每个用户——见 `docs/后端与多用户方案.md`）
+- ❌ 不做自己运维的服务器：不做自建 Node 服务、不做数据库运维。
+      （**例外并已实现**：可选的 Supabase 后端——托管服务，行级安全把数据隔离到每个用户，
+      见 `docs/后端与多用户方案.md`。不配置它时，站点仍然是纯静态、零网络请求的。）
 - ❌ 不做社交、不做排行榜、不做聊天。
 - ❌ 不接入付费服务；所有可选联网功能都可用免费方案实现。
 - ❌ 不使用官方游戏素材、不热链第三方图片（见 DESIGN.md 版权护栏）。
@@ -86,8 +91,8 @@
 ## 技术栈
 - **构建**：Vite（开发热更新 / 生产打包成静态文件）
 - **运行时**：原生 JavaScript ES Modules + 原生 CSS（无 React/Vue，降低小白的理解与维护成本）
-- **依赖**：仅 `vite` 一个开发依赖，打包产物零第三方运行时依赖
-- **存储**：localStorage（单机）+ JSON 文件（迁移）
+- **依赖**：运行时零依赖；`@supabase/supabase-js` 只在**用户真的配置了云端**时才按需加载（单独分包）
+- **存储**：localStorage（单机）+ JSON 文件（迁移）+ 可选的 Supabase（多设备 / 多用户）
 - **部署**：GitHub Pages，`main` 放源码、`gh-pages` 放构建成品，Source 选 `gh-pages` 分支
 
 ## 数据模型（localStorage key: `kivotos-kaoyan-v1`）
@@ -104,12 +109,23 @@
   scores:    [ { id, year, school, major, total, lines{}, note } ],
   progress:  { streak, bestStreak, lastCheckIn, exp, level },
   medals:    { unlocked: { [id]: ISO时间 } },
-  settings:  { theme, mascots{hoshino,arona,plana,speech}, customCharacters, aiApi{baseUrl,apiKey,model,enabled}, sync{gistToken,gistId} },
-  onboarded: false
+  settings:  { theme, mascots{hoshino,arona,plana,speech}, customCharacters,
+               aiApi{baseUrl,apiKey,model,enabled}, sync{gistToken,gistId},
+               supabaseUrl, supabaseAnon, cloud{autoPush} },
+  onboarded: false,
+  cloudUpdatedAt: ''   // 本地最后一次改动时间，与云端 updated_at 比对决定推还是拉
 }
 ```
 > 满分规则：数学 150 / 英语 100 / 政治 100 / 专业课 150（总分 500，不考数学 350）。
 > 满分由 `SUBJECTS[].full` 决定，不接受外部传参，避免被写错。
+
+**云端同步用到的另外两个键**（不在这份 state 里，属于设备本地）：
+
+| 键名 | 存什么 |
+|------|--------|
+| `kivotos-kaoyan-cloud-cfg-v1` | Supabase 的 Project URL 与 anon key |
+| `kivotos-kaoyan-cloud-meta-v1` | 登录的 user_id / 邮箱、上次同步时间、是否做过首次同步 |
+| `kivotos-kaoyan-auth` | 登录会话（由 Supabase SDK 写入，`auth.storageKey` 指定） |
 
 ## 免费部署方案
 | 方案 | 费用 | 难度 | 说明 |

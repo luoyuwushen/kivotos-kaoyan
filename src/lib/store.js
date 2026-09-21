@@ -4,6 +4,7 @@
  */
 
 import { uid, toDateKey, startOfDay, addDays, daysBetween, clamp } from './utils.js'
+import { payloadFromState, markLocalDirty, initCloudSync } from './cloud.js'
 
 export const STORAGE_KEY = 'kivotos-kaoyan-v1'
 export const DATA_VERSION = 1
@@ -80,10 +81,19 @@ function defaultState() {
       // 放了图之后在「设置 → 外观与角色」里打开即可。
       customCharacters: false,
       aiApi: { baseUrl: '', apiKey: '', model: '', enabled: false },
-      sync: { gistToken: '', gistId: '' }
+      sync: { gistToken: '', gistId: '' },
+      // 云端同步（路径 2：Supabase）。这两项只是界面上的回显，
+      // 真正的配置存在 localStorage 的 kivotos-kaoyan-cloud-cfg-v1 里，
+      // 而且推送时会被 payloadFromState() 剔除，不会在设备之间乱搬。
+      supabaseUrl: '',
+      supabaseAnon: '',
+      // 云端同步的开关（跟着这份数据走，换设备保持一致）
+      cloud: { autoPush: true }
     },
     // 首次使用引导是否已完成
-    onboarded: false
+    onboarded: false,
+    // 本地最后一次改动时间（ISO）。用于和云端 updated_at 比对，决定推还是拉。
+    cloudUpdatedAt: ''
   }
 }
 
@@ -119,7 +129,15 @@ export const state = load()
 const listeners = new Set()
 let saveTimer = null
 
-/** 数据变更后调用：合并写入 + 通知界面 */
+/** 从云端写入本地时置为 true：那次改动不算「本地改动」，不能反过来再推回云端 */
+let applyingRemote = false
+
+/** 本地最后一次改动时间，用于和云端 updated_at 比较（决定推 / 拉） */
+export function localUpdatedAt() {
+  return state.cloudUpdatedAt || ''
+}
+
+/** 数据变更后调用：合并写入 + 通知界面 + 标记本地改动 */
 export function commit(reason = 'update') {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
@@ -129,6 +147,11 @@ export function commit(reason = 'update') {
       console.error('[store] 保存失败（可能是浏览器隐私模式或空间不足）', err)
     }
   }, 120)
+  if (!applyingRemote) {
+    state.cloudUpdatedAt = new Date().toISOString()
+    // 已经配置并登录了云端才会真的排队推送；没配就是空操作
+    markLocalDirty(reason)
+  }
   for (const fn of listeners) {
     try {
       fn(state, reason)
@@ -162,6 +185,52 @@ export function importJSON(text) {
   Object.assign(state, merged)
   commit('import')
   return true
+}
+
+/* ---------------- 云端同步的挂钩（路径 2：Supabase） ---------------- */
+
+/**
+ * 取出要送上云端的整份数据。
+ * 会剔除纯设备相关的开关（同步配置、AI Key 之类不搬），见 cloud.js/payloadFromState。
+ */
+export function cloudPayload() {
+  return payloadFromState(state)
+}
+
+/**
+ * 把云端数据写回本地。
+ * 走 applyingRemote 标记：这次写入不更新 cloudUpdatedAt，
+ * 否则「刚拉下来」会被当成「本地有新改动」，下次又推回去，形成来回对冲。
+ */
+export function applyCloudPayload(payload) {
+  if (!payload || typeof payload !== 'object') return false
+  const remembered = state.cloudUpdatedAt
+  applyingRemote = true
+  try {
+    const merged = mergeDefaults(payload, defaultState())
+    for (const key of Object.keys(state)) delete state[key]
+    Object.assign(state, merged)
+    state.cloudUpdatedAt = remembered
+    commit('cloud:pull')
+  } finally {
+    applyingRemote = false
+  }
+  // 立刻落盘，避免「刚拉下来还没写 localStorage 就关了页面」
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  } catch (err) {
+    console.warn('[store] 云端数据落盘失败', err)
+  }
+  return true
+}
+
+/** 把数据层接到云端同步引擎上；app 启动时调一次 */
+export function connectCloud() {
+  initCloudSync({
+    getPayload: cloudPayload,
+    applyPayload: applyCloudPayload,
+    getLocalUpdatedAt: localUpdatedAt
+  })
 }
 
 /* ---------------- 委托单（每日任务） ---------------- */

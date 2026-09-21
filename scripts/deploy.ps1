@@ -29,7 +29,14 @@ param(
 
   [string]$Repo = 'kivotos-kaoyan',
 
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+
+  # 默认**拒绝**把 .env.local 里的 Supabase 配置打进发布包。
+  # 原因：GitHub Pages 是公开的，一旦把某个项目的 URL + anon key 编进 bundle，
+  # 所有访客（包括陌生人）打开站点都会被指向那个项目、往那个库里写数据 ——
+  # 那等于把你的备考记录放到一个别人也能写的地方。
+  # 真要这么做（自己一个人用、就想打开即配好），显式加 -BakeSupabaseConfig。
+  [switch]$BakeSupabaseConfig
 )
 
 $ErrorActionPreference = 'Stop'
@@ -128,6 +135,27 @@ Write-Step 3 '构建自检'
 if ($SkipBuild) {
   Write-Warn2 '已跳过构建自检'
 } else {
+  # 3a. 护栏：别把 .env.local 里的后端配置打进公开的发布包
+  $envLocal = Join-Path $root '.env.local'
+  if ((Test-Path $envLocal) -and -not $BakeSupabaseConfig) {
+    $hasCloud = Select-String -Path $envLocal -Pattern 'VITE_SUPABASE_URL\s*=\s*https' -Quiet
+    if ($hasCloud) {
+      Write-Err2 '发现 .env.local 里配置了 Supabase，已中止构建。'
+      Write-Host ''
+      Write-Host '  为什么拦下来：GitHub Pages 是公开的。把项目地址与 anon key 编进' -ForegroundColor Yellow
+      Write-Host '  发布包之后，所有访客打开站点都会被指向你的 Supabase 项目，' -ForegroundColor Yellow
+      Write-Host '  也就是陌生人也能往那个库里写东西。' -ForegroundColor Yellow
+      Write-Host ''
+      Write-Host '  想让线上站点「打开即配好」、且只有你自己用 → 加 -BakeSupabaseConfig 再跑一次。' -ForegroundColor Cyan
+      Write-Host '  想让每个使用者填自己的项目（推荐）→ 把 .env.local 改名成 .env.local.bak，' -ForegroundColor Cyan
+      Write-Host '  再跑一次；线上站点会引导使用者在「设置 → 云端同步」里自己填。' -ForegroundColor Cyan
+      exit 1
+    }
+  }
+  if ((Test-Path $envLocal) -and $BakeSupabaseConfig) {
+    Write-Warn2 '按你的要求，把 .env.local 里的 Supabase 配置打进了发布包（只有你自己用时才该这么做）'
+  }
+
   if (-not (Test-Path (Join-Path $root 'node_modules'))) {
     Write-Host '  正在安装依赖（第一次会慢一点）…'
     npm install --no-audit --no-fund
