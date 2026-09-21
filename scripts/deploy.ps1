@@ -35,8 +35,13 @@ param(
   # 原因：GitHub Pages 是公开的，一旦把某个项目的 URL + anon key 编进 bundle，
   # 所有访客（包括陌生人）打开站点都会被指向那个项目、往那个库里写数据 ——
   # 那等于把你的备考记录放到一个别人也能写的地方。
-  # 真要这么做（自己一个人用、就想打开即配好），显式加 -BakeSupabaseConfig。
-  [switch]$BakeSupabaseConfig
+  # 想让线上站点「打开即配好」：加 -AskCredentials（会问你一次，然后自动写好并构建）。
+  [switch]$BakeSupabaseConfig,
+
+  # 构建前交互式地问一次 Supabase 的项目地址与 anon key，写进 .env.local 并烘焙进这次构建。
+  # 这是把「已提交的 dist/ 里不含后端配置」这个坑填上：线上构建读不到 .env.local，
+  # 所以想让线上打开即配好，必须在**这次构建时**把值给它。
+  [switch]$AskCredentials
 )
 
 $ErrorActionPreference = 'Stop'
@@ -135,8 +140,37 @@ Write-Step 3 '构建自检'
 if ($SkipBuild) {
   Write-Warn2 '已跳过构建自检'
 } else {
-  # 3a. 护栏：别把 .env.local 里的后端配置打进公开的发布包
   $envLocal = Join-Path $root '.env.local'
+
+  # 3a. 顺路把后端配置写好：问你一次项目地址 + anon key，
+  # 写进 .env.local 并直接烘焙进这次构建。
+  # （anon key 是公开信息，没有「自动取回」的接口 —— 它就是给人复制的。）
+  if ($AskCredentials) {
+    Write-Host ''
+    Write-Host '  下面填入你的 Supabase 项目（控制台 → Project Settings → API）' -ForegroundColor Cyan
+    $projUrl = (Read-Host '  Project URL（形如 https://abcdefgh.supabase.co）').Trim().TrimEnd('/')
+    if ($projUrl -notmatch '^https://[a-z0-9-]+\.supabase\.(co|in)$') {
+      Write-Err2 'Project URL 格式不对：应该形如 https://abcdefgh.supabase.co（不要带结尾斜杠或 /rest/v1）'
+      exit 1
+    }
+    $anonKey = (Read-Host '  anon public key（那一行长字符串，不是 service_role）').Trim()
+    if ($anonKey.Length -lt 40) { Write-Err2 'anon key 看起来不完整'; exit 1 }
+    if ($anonKey -match '^sb_secret_|service_role') {
+      Write-Err2 '这是 service_role / secret key，绝对不能放前端。请用 anon public key。'
+      exit 1
+    }
+
+    @(
+      '# Supabase 后端配置（本文件不进版本库；anon key 是公开信息，安全边界是数据库的 RLS）',
+      "VITE_SUPABASE_URL=$projUrl",
+      "VITE_SUPABASE_ANON_KEY=$anonKey",
+      ''
+    ) | Set-Content -Path $envLocal -Encoding UTF8
+    Write-Ok "已写入 .env.local：$projUrl"
+    $BakeSupabaseConfig = [switch]$true
+  }
+
+  # 3b. 护栏：别在没打招呼的情况下把后端配置打进公开的发布包
   if ((Test-Path $envLocal) -and -not $BakeSupabaseConfig) {
     $hasCloud = Select-String -Path $envLocal -Pattern 'VITE_SUPABASE_URL\s*=\s*https' -Quiet
     if ($hasCloud) {
@@ -146,14 +180,14 @@ if ($SkipBuild) {
       Write-Host '  发布包之后，所有访客打开站点都会被指向你的 Supabase 项目，' -ForegroundColor Yellow
       Write-Host '  也就是陌生人也能往那个库里写东西。' -ForegroundColor Yellow
       Write-Host ''
-      Write-Host '  想让线上站点「打开即配好」、且只有你自己用 → 加 -BakeSupabaseConfig 再跑一次。' -ForegroundColor Cyan
-      Write-Host '  想让每个使用者填自己的项目（推荐）→ 把 .env.local 改名成 .env.local.bak，' -ForegroundColor Cyan
-      Write-Host '  再跑一次；线上站点会引导使用者在「设置 → 云端同步」里自己填。' -ForegroundColor Cyan
+      Write-Host '  想让线上站点「打开即配好」、且只有你自己用（推荐）：' -ForegroundColor Cyan
+      Write-Host '    加 -AskCredentials，脚本会问你一次项目地址，然后自动写好并构建。' -ForegroundColor Cyan
+      Write-Host '  想让每个使用者填自己的项目：把 .env.local 改名成 .env.local.bak 再跑一次。' -ForegroundColor Cyan
       exit 1
     }
   }
   if ((Test-Path $envLocal) -and $BakeSupabaseConfig) {
-    Write-Warn2 '按你的要求，把 .env.local 里的 Supabase 配置打进了发布包（只有你自己用时才该这么做）'
+    Write-Warn2 '已把 .env.local 里的 Supabase 配置打进发布包（线上站点打开即配好，只适合自己一个人用）'
   }
 
   if (-not (Test-Path (Join-Path $root 'node_modules'))) {

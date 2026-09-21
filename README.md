@@ -24,6 +24,14 @@
 > 仓库 Settings → Pages → Source 选 **Deploy from a branch → `gh-pages` / (root)**。
 > 更新内容：改完代码双击 `一键上线.bat`，它会自动构建并同步 `gh-pages`。
 > （仓库里另有一条 `.github/workflows/deploy.yml` 的 GitHub Actions 路线，二选一，别同时开。）
+>
+> 推送成功后 GitHub Pages 要重建，**线上不是立刻变的**，通常 1～10 分钟；
+> 这期间线上仍是上一版，属正常现象。
+>
+> ⚠️ **上线护栏**：如果项目根目录存在配了 Supabase 的 `.env.local`，`deploy.ps1` 会**拒绝构建**
+> 并告诉你原因 —— 因为 GitHub Pages 是公开的，把某个项目的 URL + anon key 编进发布包之后，
+> 所有访客打开站点都会被指向那个项目。只有「自己一个人用、就想打开即配好」时才加
+> `-BakeSupabaseConfig` 绕过它。
 
 > **非商业声明**：本站为个人备考自用，无广告、无收费、无任何形式的盈利。
 > 《蔚蓝档案》及其角色（小鸟游星野、阿洛娜、普拉娜）版权归 Nexon / Yostar 所有。
@@ -108,29 +116,41 @@
 2. 进 **SQL Editor → New query**，把仓库里 [`docs/supabase-schema.sql`](docs/supabase-schema.sql)
    整段粘进去 → **Run**。看到 `Success. No rows returned` 就成了。
    > 这一步建表 + 打开行级安全 + 装自动时间戳。**不做这步，登录后会提示「还没有 kaoyan_data 表」。**
+   >
+   > **控制台报 `Failed to get project's logs`？** 那是底部日志面板拉不到日志，不是你的 SQL 失败。
+   > 用这两招确认：① 新建查询跑 `select count(*) from pg_policies where tablename='kaoyan_data';`
+   > ② 或看左侧 **Table Editor** 里有没有 `kaoyan_data` 表。
+   > 建表脚本可以重复执行（`create table if not exists` + 策略先删再建），多跑几次不会坏。
+   > 如果 SQL Editor 整条路都不行，还可以绕开它：
+   > `node scripts/apply-schema.mjs --db-host db.xxxx.supabase.co --db-pass '数据库密码'`
+   > （连 Postgres 直连，建完自动自检表/RLS/策略/触发器）
 3. 进 **Authentication → Sign In / Providers → Email**，确认邮箱登录是开着的。
    测试阶段建议顺手关掉 **Confirm email**，省得每次注册都要去点邮件。
 
-**第 2 步：把项目接到站点上（二选一）**
+**第 2 步：把项目接到站点上（先想清楚「谁来填」）**
 
-- **给使用者自己填（GitHub Pages 线上站点就是这样）**：
-  打开站点 → **设置 → 云端同步** → 填 Project URL 与 anon public key → 保存 → 用邮箱登录。
-  这两项在 Supabase 控制台 **Project Settings → API** 里。
-- **自己部署一份、想让打开就配好**：在项目根目录建 `.env.local`（已在 `.gitignore` 里）：
+这里有个容易踩的坑：**GitHub Pages 的线上构建读不到 `.env.local`**（它不进版本库）。
+所以「本地构建带上配置」≠「线上站点也带上配置」。按你的用途选一种：
 
-  ```ini
-  VITE_SUPABASE_URL=https://你的项目.supabase.co
-  VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
-  ```
+| | 方式 A：线上站点自己用（**推荐**） | 方式 B：线上站点给多人用 |
+|---|---|---|
+| 谁填配置 | 构建时就写死了 | 每个使用者在「设置 → 云端同步」里填自己的项目 |
+| 怎么做 | 跑 `deploy.ps1 -AskCredentials`，它问你一次地址和 key，写进 `.env.local` 并烘焙进这次构建 | 什么都不用做（现在的线上站点就是这种） |
+| 打开站点 | 已经是配好的，直接登录 | 引导使用者填自己的 Project URL + anon key |
+| 适合 | 自己一个人用，手机电脑都登录同一个账号 | 把网址发给同学，各自建项目、数据各归各的 |
 
-  然后 `npm run build`。构建期会把它写进去，打开站点就已经配好了。
+方式 A 的命令（**注意要带 `-AskCredentials`**，否则脚本会拒绝构建）：
 
-  > 更省事的做法：跑 `npm run supabase:setup`，它会问你要这两项、写进 `.env.local`，
-  > 然后**立刻跑一遍真机联调**（建表有没有生效、RLS 拦不拦得住越权、隔离对不对）。
-  >
-  > 注意：GitHub Pages 的线上构建读不到 `.env.local`（它不进版本库），
-  > 所以线上站点会回到「使用者在设置页自己填」——这对「给同学用」反而是对的：
-  > 每个人填自己的项目，数据各归各的。
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Username 你的GitHub用户名 -AskCredentials
+```
+
+> 为什么默认要拦：GitHub Pages 是公开的。一旦把项目地址编进发布包，**所有访客**打开站点
+> 都会被指向你的项目；配上后台关闭公开注册，别人就写不进去（能写也只写进他自己那一行，
+> 被 RLS 挡着）。即便如此，公开站点带上你的项目地址也不是好默认，所以必须显式加开关。
+>
+> 只想在**本地**构建带上配置（自己跑 `npm run dev` / `npm run preview`）：
+> 跑 `npm run supabase:setup`，它会写 `.env.local` 并立刻跑一遍真机联调。
 
 **第 3 步：登录，选一次同步方向**
 
@@ -146,6 +166,10 @@
 - 数据存在**你自己的** Supabase 项目里，站主看不到；换个人注册就是一份独立数据。
 - 行级安全策略在 `docs/supabase-schema.sql` 里，一共 4 条（读/增/改/删各一条），
   可以自己审。表还开了 `force row level security`，连表属主都绕不过策略。
+- **建议关掉公开注册**：如果你是自己一个人用（方式 A），到
+  **Authentication → Sign In / Providers → Email** 把 **Allow new users to sign up** 关掉。
+  这样即使别人拿到你的站点和 anon key，也注册不了账号、更读不到你任何一行数据；
+  你自己先用邮箱注册好，之后照常登录。
 - 本地数据**不会因为你登录就被删**：云端数据是另一份，导入导出备份随时可用。
 - 退出登录、删云端数据都是显式操作，删云端**不影响本机**。
 
