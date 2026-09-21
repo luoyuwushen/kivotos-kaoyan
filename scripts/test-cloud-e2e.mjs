@@ -69,8 +69,15 @@ function readEnvFileQuiet(file) {
 const localEnv = { ...readEnvFileQuiet('.env'), ...readEnvFileQuiet('.env.local') }
 const PROJ = (arg('url') || process.env.VITE_SUPABASE_URL || localEnv.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
 const ANON = arg('anon') || process.env.VITE_SUPABASE_ANON_KEY || localEnv.VITE_SUPABASE_ANON_KEY || ''
-/** 显式给了 --url/--anon 时，需要在页面里自己塞一份配置（线上站点就是这样） */
-const INJECT_CONFIG = Boolean(arg('url'))
+/**
+ * 页面里的配置怎么来：
+ *   · --baked      站点自己带着配置（线上内置配置的那种部署），什么都不用注入
+ *   · --url/--anon 站点没带配置（通用模板），测试时往页面里塞一份
+ *   · 都没有       用本机 .env.local 烘焙的配置，同样什么都不用注入
+ * 注意：无论哪种，PROJ/ANON 都必须有 —— 脚本要用它们独立核对云端。
+ */
+const BAKED = process.argv.includes('--baked')
+const INJECT_CONFIG = !BAKED && Boolean(arg('url'))
 
 if (!PROJ || !ANON) {
   console.log(`读不到项目地址与 anon key。两种给法：
@@ -86,7 +93,7 @@ if (!PROJ || !ANON) {
 }
 info(`目标站点：${BASE}`)
 info(`目标项目：${PROJ}`)
-info(`配置来源：${INJECT_CONFIG ? '命令行传入（会在页面里注入）' : '构建期烘焙（.env.local）'}`)
+info(`配置来源：${INJECT_CONFIG ? '命令行传入（测试时注入页面）' : BAKED ? '站点内置（baked）' : '本机构建烘焙（.env.local）'}`)
 info(`代理：${PROXY || '（不用代理）'}`)
 
 const REF = new URL(PROJ).hostname.split('.')[0]

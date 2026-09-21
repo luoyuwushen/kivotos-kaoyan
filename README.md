@@ -87,6 +87,13 @@
 
 ## 用 Supabase 做真正的后端（可选，路径 2）
 
+> **本仓库当前的线上站点（luoyuwushen.github.io/kivotos-kaoyan）属于「方式 A」**：
+> Supabase 配置已经**内置在构建产物里**，打开站点就已经配好，设置页不会出现填写入口，
+> 也没有「改配置」按钮 —— 使用者直接登录即可（后端由本站固定提供）。
+>
+> 如果你把这份代码 fork 出去自己部署，默认是「方式 B」（通用模板）：需要使用者自己填项目，
+> 或者你也用 `-AskCredentials` / `-BakeSupabaseConfig` 把它内置成方式 A。两种都支持。
+
 > 这一节是给「想手机和电脑自动同步」或「想让同学各自注册使用」的人看的。
 > 不需要的话**整节跳过**，上面所有功能照样能用。
 
@@ -142,22 +149,30 @@
 这里有个容易踩的坑：**GitHub Pages 的线上构建读不到 `.env.local`**（它不进版本库）。
 所以「本地构建带上配置」≠「线上站点也带上配置」。按你的用途选一种：
 
-| | 方式 A：线上站点自己用（**推荐**） | 方式 B：线上站点给多人用 |
+| | 方式 A：内置配置（本站线上就是这种） | 方式 B：通用模板 |
 |---|---|---|
-| 谁填配置 | 构建时就写死了 | 每个使用者在「设置 → 云端同步」里填自己的项目 |
-| 怎么做 | 跑 `deploy.ps1 -AskCredentials`，它问你一次地址和 key，写进 `.env.local` 并烘焙进这次构建 | 什么都不用做（现在的线上站点就是这种） |
+| 谁填配置 | 构建时写死，**使用者看不到也改不了** | 每个使用者在「设置 → 云端同步」里填自己的项目 |
+| 怎么做 | `deploy.ps1 -AskCredentials`（会问一次）或先写好 `.env.local` 再加 `-BakeSupabaseConfig` | 什么都不用做 |
 | 打开站点 | 已经是配好的，直接登录 | 引导使用者填自己的 Project URL + anon key |
-| 适合 | 自己一个人用，手机电脑都登录同一个账号 | 把网址发给同学，各自建项目、数据各归各的 |
+| 适合 | **自己一个人用**（推荐，本站当前就是这样） | 把网址发给同学，各自建项目、数据各归各的 |
 
-方式 A 的命令（**注意要带 `-AskCredentials`**，否则脚本会拒绝构建）：
+方式 A 的命令：
 
 ```powershell
+# 交互式：问你一次 Project URL 与 anon public key，自动写好并构建上线
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Username 你的GitHub用户名 -AskCredentials
+
+# 或者已经写好 .env.local 了，只是显式放行这次构建
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Username 你的GitHub用户名 -BakeSupabaseConfig
 ```
 
-> 为什么默认要拦：GitHub Pages 是公开的。一旦把项目地址编进发布包，**所有访客**打开站点
-> 都会被指向你的项目；配上后台关闭公开注册，别人就写不进去（能写也只写进他自己那一行，
-> 被 RLS 挡着）。即便如此，公开站点带上你的项目地址也不是好默认，所以必须显式加开关。
+> **方式 A 的注意事项（重要）**：线上是公开站点，配置内置后**任何访客打开都会被指向你的项目**。
+> 数据本身仍然各归各的（RLS 保证每人只能读写自己那一行），但他们能注册账号、往你的库里写数据。
+> 所以内置配置时强烈建议去 **Authentication → Sign In / Providers → Email** 把
+> **Allow new users to sign up** 关掉 —— 你自己先注册好账号，之后照常登录，别人就进不来了。
+>
+> 不加 `-AskCredentials` / `-BakeSupabaseConfig` 时，脚本发现 `.env.local` 里有配置会**直接拒绝构建**，
+> 就是为了避免「不小心把后端地址发到公网」。
 >
 > 只想在**本地**构建带上配置（自己跑 `npm run dev` / `npm run preview`）：
 > 跑 `npm run supabase:setup`，它会写 `.env.local` 并立刻跑一遍真机联调。
