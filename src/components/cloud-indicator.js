@@ -82,6 +82,10 @@ export function mountCloudIndicator(sidenav) {
   })
   paint()
 
+  // 标记「这个站配了后端」：只为让 CSS 能做针对性处理，
+  // 不改任何数据。手机端底栏会据此决定要不要显示这个入口。
+  document.documentElement.dataset.cloud = 'on'
+
   sidenav.append(node)
   return node
 }

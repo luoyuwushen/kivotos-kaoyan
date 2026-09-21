@@ -42,6 +42,113 @@ ref 就是项目 URL 里那一段：https://<ref>.supabase.co
 
 const API = 'https://api.supabase.com/v1'
 
+/**
+ * 把 SQL 文件切成一条条语句。
+ *
+ * 这里踩过一个真实的坑，必须记下来：Management API 一次只接受**一条**语句，
+ * 所以要把文件拆开送。但天真的「按分号 split」会把 PostgreSQL 的
+ * `$$ ... $$` 函数体切碎 —— 函数体里的分号被当成语句结尾，
+ * 结果送出去的是半截 CREATE FUNCTION，接口直接回 401/400，
+ * 让人以为是权限问题，其实是自己的切分错了。
+ * 所以这里必须认识美元引用（含 $tag$ 形式）和普通字符串字面量。
+ */
+function splitStatements(sql) {
+  const out = []
+  let current = ''
+  let i = 0
+  let dollarTag = null // 正在 $$…$$ 或 $tag$…$tag$ 里
+  let inSingle = false // 正在 '...' 里
+  let inLineComment = false
+  let inBlockComment = false
+
+  while (i < sql.length) {
+    const ch = sql[i]
+    const next = sql[i + 1]
+
+    if (inLineComment) {
+      current += ch
+      if (ch === '\n') inLineComment = false
+      i++
+      continue
+    }
+    if (inBlockComment) {
+      current += ch
+      if (ch === '*' && next === '/') {
+        current += next
+        i += 2
+        inBlockComment = false
+        continue
+      }
+      i++
+      continue
+    }
+    if (inSingle) {
+      current += ch
+      if (ch === "'") {
+        if (next === "'") {
+          current += next
+          i += 2
+          continue
+        }
+        inSingle = false
+      }
+      i++
+      continue
+    }
+    if (dollarTag) {
+      if (sql.startsWith(dollarTag, i)) {
+        current += dollarTag
+        i += dollarTag.length
+        dollarTag = null
+        continue
+      }
+      current += ch
+      i++
+      continue
+    }
+
+    if (ch === '-' && next === '-') {
+      inLineComment = true
+      current += ch + next
+      i += 2
+      continue
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true
+      current += ch + next
+      i += 2
+      continue
+    }
+    if (ch === "'") {
+      inSingle = true
+      current += ch
+      i++
+      continue
+    }
+    if (ch === '$') {
+      const m = /^\$[A-Za-z_]*\$/.exec(sql.slice(i))
+      if (m) {
+        dollarTag = m[0]
+        current += dollarTag
+        i += dollarTag.length
+        continue
+      }
+    }
+    if (ch === ';') {
+      out.push(current.trim())
+      current = ''
+      i++
+      continue
+    }
+    current += ch
+    i++
+  }
+  if (current.trim()) out.push(current.trim())
+
+  // 只由注释组成的片段不算语句
+  return out.filter((s) => s && !s.split('\n').every((line) => line.trim().startsWith('--')))
+}
+
 async function api(path, { method = 'GET', body = null } = {}) {
   const res = await fetch(`${API}${path}`, {
     method,
@@ -74,17 +181,27 @@ console.log(`✓ 项目可访问：${project.json.name}（区域 ${project.json.
 
 /* ---------------- 2. 执行建表 SQL ---------------- */
 const sql = await readFile(sqlFile, 'utf8')
-console.log(`  执行 ${sqlFile}（${sql.length} 字符）…`)
+const statements = splitStatements(sql)
+console.log(`  执行 ${sqlFile}：${statements.length} 条语句\n`)
 
-const run = await api(`/projects/${ref}/database/query`, {
-  method: 'POST',
-  body: { query: sql }
-})
-if (run.status >= 400) {
-  console.error(`✗ 执行失败（HTTP ${run.status}）：${run.text.slice(0, 400)}`)
-  process.exit(1)
+let execFailed = 0
+for (const [i, statement] of statements.entries()) {
+  const label = (statement.split('\n').find((l) => l.trim() && !l.trim().startsWith('--')) || statement)
+    .trim()
+    .slice(0, 66)
+  const r = await api(`/projects/${ref}/database/query`, { method: 'POST', body: { query: statement } })
+  if (r.status >= 400) {
+    console.error(`  ✗ [${i + 1}/${statements.length}] ${label}`)
+    console.error(`      HTTP ${r.status} ${r.text.slice(0, 200)}`)
+    execFailed++
+  } else {
+    const shown = r.text && r.text !== '[]' ? ` → ${r.text.slice(0, 90)}` : ''
+    console.log(`  ✓ [${i + 1}/${statements.length}] ${label}${shown}`)
+  }
 }
-console.log(`✓ 建表 SQL 执行成功${run.json ? ` → ${JSON.stringify(run.json).slice(0, 120)}` : ''}`)
+if (execFailed) {
+  console.error(`\n有 ${execFailed} 条语句执行失败，继续做自检以便看清全貌。`)
+}
 
 /* ---------------- 3. 自检：把关键事实查出来 ---------------- */
 const checks = [
@@ -116,10 +233,11 @@ const reload = await api(`/projects/${ref}/database/query`, {
 console.log(reload.status < 400 ? '  ✓ 已通知 PostgREST 重载 schema' : `  ! 重载通知失败（不影响建表）：${reload.text.slice(0, 100)}`)
 
 console.log('\n================ 结果 ================')
-if (failed) {
-  console.log(`自检有 ${failed} 项失败，请看上面的 ✗。`)
+if (failed || execFailed) {
+  console.log(`执行失败 ${execFailed} 条，自检失败 ${failed} 项 —— 请看上面的 ✗。`)
   process.exitCode = 1
 } else {
-  console.log('后端已就绪。安全提醒：去 https://supabase.com/dashboard/account/tokens')
+  console.log('后端已就绪：表、行级安全、4 条策略、时间戳触发器全部到位。')
+  console.log('安全提醒：去 https://supabase.com/dashboard/account/tokens')
   console.log('把刚才那个 token Revoke 掉（它等于你账号的钥匙）。')
 }

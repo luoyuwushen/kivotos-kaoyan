@@ -40,6 +40,13 @@ function readEnvFile(file) {
 const envFile = { ...readEnvFile('.env'), ...readEnvFile('.env.local') }
 const URL_ = (arg('url') || process.env.VITE_SUPABASE_URL || envFile.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
 const ANON = arg('anon') || process.env.VITE_SUPABASE_ANON_KEY || envFile.VITE_SUPABASE_ANON_KEY || ''
+/**
+ * 可选：Supabase 个人访问令牌（sbp_ 开头）。
+ * 项目开着「Confirm email」时，注册出来的测试账号必须先点邮件才能登录 ——
+ * 脚本没法点邮件，所以给了这个 token 就用 Admin API 直接建「已确认」的账号，
+ * 跑完再删掉。没有它也能跑，但需要你先在控制台关掉 Confirm email。
+ */
+const ADMIN_TOKEN = arg('admin-token') || process.env.SUPABASE_ACCESS_TOKEN || ''
 const TABLE = 'kaoyan_data'
 
 if (!URL_ || !ANON) {
@@ -155,28 +162,97 @@ const userA = { email: `kaoyan-live-${stamp}-a@${mailDomain}`, password: `Kaoyan
 const userB = { email: `kaoyan-live-${stamp}-b@${mailDomain}`, password: `Kaoyan-${stamp}-Bb2` }
 const sessions = {}
 
+/**
+ * 用 Admin API 建一个「邮箱已确认」的账号。
+ * 这条路需要 service_role key —— 它从 Management API 现取现用，不落盘。
+ */
+let serviceKeyCache = null
+async function serviceRoleKey() {
+  if (serviceKeyCache) return serviceKeyCache
+  const ref = new URL(URL_).hostname.split('.')[0]
+  const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/api-keys?reveal=true`, {
+    headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
+    signal: AbortSignal.timeout(45000)
+  })
+  if (!res.ok) throw new Error(`取 service_role key 失败（HTTP ${res.status}）`)
+  const keys = await res.json()
+  const entry = keys.find((k) => k.name === 'service_role' || k.type === 'secret')
+  if (!entry?.api_key) throw new Error('响应里没有 service_role key')
+  serviceKeyCache = entry.api_key
+  return serviceKeyCache
+}
+
+async function adminCreateUser(user) {
+  const key = await serviceRoleKey()
+  const res = await fetch(`${URL_}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: user.email, password: user.password, email_confirm: true }),
+    signal: AbortSignal.timeout(45000)
+  })
+  const text = await res.text()
+  return { status: res.status, text, json: safeJson(text) }
+}
+
+async function adminDeleteUser(id) {
+  if (!id || !ADMIN_TOKEN) return
+  try {
+    const key = await serviceRoleKey()
+    await fetch(`${URL_}/auth/v1/admin/users/${id}`, {
+      method: 'DELETE',
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(30000)
+    })
+  } catch {
+    /* 清理失败不影响结论，最后会提示手动删 */
+  }
+}
+
+function safeJson(text) {
+  try {
+    return text ? JSON.parse(text) : null
+  } catch {
+    return null
+  }
+}
+
 async function signUpAndLogin(user, label) {
-  const signup = await auth('signup', { body: { email: user.email, password: user.password } })
+  let signup = { status: 0, text: '(未走注册接口)' }
+  if (ADMIN_TOKEN) {
+    // 有 admin token 就直接建已确认账号，绕开「Confirm email」和发信额度
+    const created = await adminCreateUser(user)
+    signup = created
+    if (created.json?.id) user.id = created.json.id
+  } else {
+    signup = await auth('signup', { body: { email: user.email, password: user.password } })
+  }
   const login = await auth('token?grant_type=password', {
     body: { email: user.email, password: user.password }
   })
   const token = login.json?.access_token || ''
-  const id = login.json?.user?.id || signup.json?.id || ''
+  const id = login.json?.user?.id || signup.json?.id || user.id || ''
   if (token) sessions[label] = { token, id, email: user.email }
   return { signup, login, token, id }
 }
 
-console.log('\n--- 注册并登录两个测试账号 ---')
+console.log('\n--- 创建并登录两个测试账号 ---')
+if (ADMIN_TOKEN) info('用 Admin API 直接建「已确认」账号（不需要你关 Confirm email，也不消耗邮件额度）')
 const a = await signUpAndLogin(userA, 'A')
 const b = await signUpAndLogin(userB, 'B')
 
-check('账号 A 能注册并登录', Boolean(a.token), a.token ? `user_id ${a.id}` : `signup=${a.signup.status} ${String(a.signup.text).slice(0, 120)}`)
-check('账号 B 能注册并登录', Boolean(b.token), b.token ? `user_id ${b.id}` : `login=${b.login.status} ${String(b.login.text).slice(0, 120)}`)
+check('账号 A 能创建并登录', Boolean(a.token), a.token ? `user_id ${a.id}` : `signup=${a.signup.status} ${String(a.signup.text).slice(0, 140)}`)
+check('账号 B 能创建并登录', Boolean(b.token), b.token ? `user_id ${b.id}` : `login=${b.login.status} ${String(b.login.text).slice(0, 140)}`)
 
 if (!a.token || !b.token) {
-  const hint = /confirm/i.test(a.signup.text + b.signup.text)
-    ? '项目开着「Confirm email」，注册后拿不到会话。测试用的邮箱收不到信 —— 去 Authentication → Sign In / Providers → Email 关掉 Confirm email，或者用魔法链接在浏览器里手动登一次。'
-    : '请检查 anon key 是否是 anon public（不是 service_role），以及项目是否开启了 Email 登录。'
+  const blob = `${a.signup.text}${b.signup.text}`
+  let hint
+  if (/rate limit|429/i.test(blob)) {
+    hint = '免费版发信额度已用尽（每小时只允许极少量邮件）。两个办法：① 重跑时加上 --admin-token <你的 sbp_ token>，脚本会用 Admin API 建已确认账号（推荐）；② 到 Authentication → Sign In / Providers → Email 关掉 Confirm email，然后等额度恢复。'
+  } else if (/confirm/i.test(blob)) {
+    hint = '项目开着「Confirm email」，注册后拿不到会话，而测试邮箱收不到信。加上 --admin-token <sbp_ token> 让脚本用 Admin API 建已确认账号，或到控制台关掉 Confirm email。'
+  } else {
+    hint = '请检查 anon key 是否为 anon public（不是 service_role），以及项目是否开启了 Email 登录。'
+  }
   console.log(`\n拿不到会话，无法继续隔离性测试。\n提示：${hint}`)
   console.log('\n================ 真机联调结果 ================')
   console.log(`通过 ${results.filter((r) => r.ok).length} / ${results.length}（未跑完）`)
@@ -242,7 +318,7 @@ check('未登录读表被拒绝', anonRead.status === 401 || anonRead.status ===
   `HTTP ${anonRead.status} ${String(anonRead.text).slice(0, 90)}`)
 
 /* 8. 清理 */
-console.log('\n--- 收尾：删掉测试数据 ---')
+console.log('\n--- 收尾：删掉测试数据与测试账号 ---')
 for (const [label, s] of Object.entries(sessions)) {
   const del = await rest(`${TABLE}?user_id=eq.${s.id}`, { method: 'DELETE', token: s.token })
   info(`已删除账号 ${label} 的云端数据（HTTP ${del.status}）`)
@@ -250,6 +326,15 @@ for (const [label, s] of Object.entries(sessions)) {
 const leftA = await rest(`${TABLE}?user_id=eq.${a.id}&select=user_id`, { token: a.token })
 check('测试数据已清理干净', Array.isArray(leftA.json) && leftA.json.length === 0,
   `剩余 ${Array.isArray(leftA.json) ? leftA.json.length : '?'} 行`)
+
+// 有 admin token 的话，连测试账号本身也删掉，不给你的项目留垃圾
+if (ADMIN_TOKEN) {
+  await adminDeleteUser(a.id)
+  await adminDeleteUser(b.id)
+  info('已删除两个测试账号（不留残留）')
+} else {
+  info(`没给 admin token，测试账号需要你自己去 Authentication → Users 删：${userA.email} / ${userB.email}`)
+}
 
 /* ---------------- 汇总 ---------------- */
 
@@ -262,6 +347,7 @@ if (failed.length) {
   process.exitCode = 1
 } else {
   console.log('\n后端可用：登录、隔离、越权拦截、清理全部通过。')
-  console.log(`提醒：可以在 Supabase 控制台 → Authentication → Users 里删掉这两个测试账号：`)
-  console.log(`  ${userA.email}\n  ${userB.email}`)
+  if (ADMIN_TOKEN) {
+    console.log('别忘了：去 https://supabase.com/dashboard/account/tokens 把这次用的 token Revoke 掉。')
+  }
 }

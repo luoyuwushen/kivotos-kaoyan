@@ -2736,16 +2736,14 @@ canvas {
   color: var(--warning);
 }
 
-/* 手机 / 平板：导航变成一条横向标签栏，云端入口要挤进同一行且不撑破布局 */
+/* 手机 / 平板：导航变成一条横向标签栏。
+   这里**不显示**云端入口 —— 它最少也要占 44px（纯图标），
+   会把 8 个导航按钮从 48px 挤到 34px，直接违反「触摸目标 ≥44px」这条硬指标。
+   底栏的 8 项布局是设计基准，不能为了一个新入口去动它；
+   手机用户仍然可以在「设置 → 云端同步」里看到完整状态并操作。 */
 @media (max-width: 1000px) {
   .nav-cloud {
-    width: auto;
-    min-width: 44px;
-    margin-top: 0;
-    padding: 0.4rem 0.6rem;
-  }
-  .nav-cloud__text {
-    max-width: 7.5rem;
+    display: none;
   }
 }
 

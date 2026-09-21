@@ -235,7 +235,10 @@ function humanize(error, fallback = '云端操作失败') {
   if (/User already registered/i.test(raw)) return '这个邮箱已经注册过了，直接登录即可'
   if (/Password should be at least/i.test(raw)) return '密码至少 6 位'
   if (/email rate limit|over_email_send_rate_limit/i.test(raw)) {
-    return '邮件发送太频繁了 —— Supabase 免费额度每小时只发少量邮件，等一会儿再试'
+    return '登录邮件发送太频繁了 —— Supabase 免费版每小时只允许发少量邮件，等一会儿再试，或改用「邮箱 + 密码」注册登录'
+  }
+  if (/otp_disabled|Signups not allowed/i.test(raw)) {
+    return '这个项目不允许用登录链接注册新账号 —— 请到 Authentication → Sign In / Providers → Email 打开「Allow new users to sign up」，或改用「邮箱 + 密码」注册'
   }
   if (/Failed to fetch|NetworkError|ERR_NAME_NOT_RESOLVED/i.test(raw)) {
     return '连不上云端（检查网络，或确认项目 URL 没写错）'
@@ -366,17 +369,31 @@ async function bindAuthBridge() {
 /**
  * 发送魔法链接（免密码）。
  * 链接会带回本站，SDK 自动完成登录。
+ *
+ * 这里有个实测出来的坑：Supabase 项目如果在 Authentication 里关掉了
+ * 「Allow new users to sign up」，那么 `shouldCreateUser: true` 会被直接拒绝，
+ * 报 `422 otp_disabled / Signups not allowed for otp` —— 而**老用户其实是可以收链接的**。
+ * 所以第一次失败时退一步用 `shouldCreateUser: false` 再试一次：
+ * 已注册过的人照样能登录，没注册过的人拿到的报错也更准确。
  */
 export async function signInWithEmail(email, { redirectTo } = {}) {
   const sb = await getClient()
-  const { error } = await sb.auth.signInWithOtp({
-    email: String(email).trim(),
-    options: {
-      emailRedirectTo: redirectTo || location.origin + location.pathname,
-      shouldCreateUser: true
-    }
+  const target = String(email).trim()
+  const options = {
+    emailRedirectTo: redirectTo || location.origin + location.pathname,
+    shouldCreateUser: true
+  }
+  const first = await sb.auth.signInWithOtp({ email: target, options })
+  if (!first.error) return
+
+  const otpDisabled = /otp_disabled|Signups not allowed/i.test(first.error.message || '')
+  if (!otpDisabled) throw new Error(humanize(first.error, '发送登录链接失败'))
+
+  const second = await sb.auth.signInWithOtp({
+    email: target,
+    options: { ...options, shouldCreateUser: false }
   })
-  if (error) throw new Error(humanize(error, '发送登录链接失败'))
+  if (second.error) throw new Error(humanize(second.error, '发送登录链接失败'))
 }
 
 /** 邮箱 + 密码登录 */
@@ -641,24 +658,31 @@ export async function runSync({ auto = false, direction = null, reason = '' } = 
       }
 
       /**
-       * 本地完全是空的（新设备、或刚清了浏览器数据）时：
-       *   · 云端有数据 → 直接拉下来。这里不能走「时间戳谁新」那套判断，
-       *     因为空数据也会有 cloudUpdatedAt（每次 commit 都会盖章），
-       *     会被误判成「本地更新」，把云端的备份当冲突，甚至用空数据覆盖云端。
-       *   · 云端也没数据 → 没什么可同步的。
+       * 「本机是空的、云端有东西」→ 直接拉，永远不要问用户。
+       *
+       * 这条判断必须放在最前面，而且**不要求 initialized**：
+       * 全新设备（或刚清过浏览器数据）本来就没有本地同步记录，
+       * 如果这时候落进「时间戳谁新」那套判断，就会出现最坏的一种交互 ——
+       * 弹窗问「保留哪一边」，而本机其实是空的，用户一旦点错
+       * 「保留本机」就等于用一份空白把云端备份覆盖掉。
+       * 空 ≠ 用户的最新数据，所以这里不猜、也不问，直接拉。
        */
-      if (!direction && cloudMeta().initialized && localEmpty) {
-        if (remote.hasRemote) {
-          hooks.applyPayload(remote.payload)
-          patchCloudMeta({
-            userId: user.id,
-            email: user.email,
-            lastSyncedAt: remote.updatedAt || new Date().toISOString(),
-            lastSyncedBy: 'pull'
-          })
-          setStatus('synced', '已从云端拉取最新数据')
-          return { ok: true, action: 'pull', message: '已拉取云端数据' }
-        }
+      if (!direction && localEmpty && remote.hasRemote) {
+        hooks.applyPayload(remote.payload)
+        patchCloudMeta({
+          userId: user.id,
+          email: user.email,
+          initialized: true,
+          lastSyncedAt: remote.updatedAt || new Date().toISOString(),
+          lastSyncedBy: 'pull'
+        })
+        setStatus('synced', '已从云端拉取最新数据')
+        return { ok: true, action: 'pull', message: '已拉取云端数据' }
+      }
+
+      // 本机空、云端也空：没什么可同步的
+      if (!direction && localEmpty && !remote.hasRemote) {
+        if (!cloudMeta().initialized) patchCloudMeta({ initialized: true, userId: user.id, email: user.email })
         setStatus('synced', '云端暂无数据')
         return { ok: true, action: 'none', message: '云端暂无数据' }
       }

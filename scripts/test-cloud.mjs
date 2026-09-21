@@ -19,6 +19,7 @@
 
 import { chromium } from 'playwright'
 import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 
 const BASE = process.env.CLOUD_TEST_BASE || 'http://127.0.0.1:4173/'
 const STORAGE_KEY = 'kivotos-kaoyan-v1'
@@ -26,8 +27,38 @@ const CFG_KEY = 'kivotos-kaoyan-cloud-cfg-v1'
 const META_KEY = 'kivotos-kaoyan-cloud-meta-v1'
 const TABLE = 'kaoyan_data'
 
-const FAKE_URL = 'https://testprojectref.supabase.co'
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.anon.fake-anon-key-for-local-tests'
+/**
+ * 关键的 URL / key 选择。
+ *
+ * cloud.js 里 env 的优先级**高于** localStorage（那是故意的：自己部署的人
+ * 可以把后端写进 .env 一起构建）。所以本机一旦有 .env.local，产物里就带着
+ * 真实项目地址，浏览器只会连它 —— 这时候再往 localStorage 里塞假配置是没用的。
+ *
+ * 于是这里做一次解析：产物带配置就用**产物里那份**（此时整个测试套件等于
+ * 拿真项目当后端、但仍然由本脚本的假服务器接管网络），否则用假地址。
+ * 这样同一套断言在两种环境下都成立，不会因为「开发机上有 .env.local」而误报。
+ */
+function readEnvFileQuiet(file) {
+  try {
+    const out = {}
+    for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line)
+      if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '')
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+const localEnv = { ...readEnvFileQuiet('.env'), ...readEnvFileQuiet('.env.local') }
+const BAKED_URL = String(process.env.VITE_SUPABASE_URL || localEnv.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
+const BAKED_ANON = String(process.env.VITE_SUPABASE_ANON_KEY || localEnv.VITE_SUPABASE_ANON_KEY || '')
+const HAS_BAKED = Boolean(BAKED_URL && BAKED_ANON)
+
+const FAKE_URL = HAS_BAKED ? BAKED_URL : 'https://testprojectref.supabase.co'
+const ANON_KEY = HAS_BAKED
+  ? BAKED_ANON
+  : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.anon.fake-anon-key-for-local-tests'
 const JWT_SECRET = 'test-jwt-secret'
 /**
  * 会话在 localStorage 里的键名。
@@ -102,7 +133,7 @@ function sessionFor(user, { expired = false } = {}) {
 /** 服务器端的数据表：user_id -> { payload, updated_at } */
 const db = new Map()
 /** 记录都被谁写过，用来验证隔离 */
-const audit = { selects: [], upserts: [], deletes: [] }
+const audit = { selects: [], upserts: [], deletes: [], otpAttempts: [], otpMode: 'ok' }
 
 const json = (route, status, body, headers = {}) =>
   route.fulfill({
@@ -146,6 +177,19 @@ async function installFakeSupabase(page) {
       return json(route, 400, { error: 'unsupported_grant_type' })
     }
     if (path === '/auth/v1/otp') {
+      // 模拟真项目可能出现的两种情况，用来验证客户端会不会正确处理：
+      //   · otpMode='disabled' → 第一次请求 422 otp_disabled，第二次（不建用户）成功
+      //   · otpMode='ratelimit' → 429，客户端要把话翻译清楚
+      const body = JSON.parse(req.postData() || '{}')
+      if (audit.otpMode === 'disabled' && body.create_user !== false) {
+        audit.otpAttempts.push('create=true')
+        return json(route, 422, { code: 422, error_code: 'otp_disabled', msg: 'Signups not allowed for otp' })
+      }
+      if (audit.otpMode === 'ratelimit') {
+        audit.otpAttempts.push('ratelimit')
+        return json(route, 429, { code: 429, error_code: 'over_email_send_rate_limit', msg: 'email rate limit exceeded' })
+      }
+      audit.otpAttempts.push(body.create_user === false ? 'create=false' : 'create=true')
       return json(route, 200, {})
     }
     if (path === '/auth/v1/signup') {
@@ -292,19 +336,40 @@ function seededState(overrides = {}) {
 const readStore = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}'), STORAGE_KEY)
 const readMeta = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}'), META_KEY)
 
+/* ------------------------------------------------------------------
+   先探一下：**这次构建**是否已经把 Supabase 配置烘焙进产物了？
+   （本机跑过 npm run supabase:setup 或带 .env.local 构建时就会。）
+   是的话，第 1 节「未配置」的场景就不适用了 —— 跳过并说明，
+   否则会误报失败，让人以为代码坏了，其实是环境不同。
+   ------------------------------------------------------------------ */
+const bakedProbe = await newPage({ seedState: seededState() })
+await bakedProbe.page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
+await bakedProbe.page.waitForTimeout(1000)
+const HAS_BAKED_CONFIG =
+  (await bakedProbe.page.locator('[data-testid="cloud-login"]').count()) === 1 &&
+  (await bakedProbe.page.locator('[data-testid="cloud-config-form"]').count()) === 0
+await bakedProbe.context.close()
+
+if (HAS_BAKED_CONFIG) {
+  console.log(`\n[i] 这次构建已把 Supabase 配置烘焙进产物（${FAKE_URL}）。`)
+  console.log('    · 「未配置」相关断言不适用 → 跳过第 1 节')
+  console.log('    · 其余断言照跑，网络仍由本脚本的假服务器接管，不会真连你的项目')
+}
+
 /* ==================================================================
    1. 没配置云端时：全站照旧，并且要能引导用户去配置
    ================================================================== */
 
-console.log('\n=== 1. 未配置云端：不打扰，且有引导 ===')
-{
-  const { context, page } = await newPage({ seedState: seededState() })
-  await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(800)
+if (!HAS_BAKED_CONFIG) {
+  console.log('\n=== 1. 未配置云端：不打扰，且有引导 ===')
+  {
+    const { context, page } = await newPage({ seedState: seededState() })
+    await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(800)
 
-  check('设置页出现「云端同步」卡片', (await page.locator('text=云端同步（可选后端）').count()) === 1)
-  check('未配置时显示「未配置」状态', (await page.locator('.cloud-status[data-state]').first().textContent()).includes('未配置'))
-  check('未配置时给出配置表单', (await page.locator('[data-testid="cloud-config-form"]').count()) === 1)
+    check('设置页出现「云端同步」卡片', (await page.locator('text=云端同步（可选后端）').count()) === 1)
+    check('未配置时显示「未配置」状态', (await page.locator('.cloud-status[data-state]').first().textContent()).includes('未配置'))
+    check('未配置时给出配置表单', (await page.locator('[data-testid="cloud-config-form"]').count()) === 1)
 
   // 错的 URL 要被拦下
   await page.locator('[data-testid="cloud-url"]').fill('https://example.com/rest/v1')
@@ -332,7 +397,8 @@ console.log('\n=== 1. 未配置云端：不打扰，且有引导 ===')
   check('未配置时导航里没有云端入口（保持纯静态观感）', navCloud === 0, `找到 ${navCloud} 个`)
   const navItems = await page.locator('.nav-item[data-view]').count()
   check('未配置时导航仍是 8 项', navItems === 8, `${navItems} 项`)
-  await context.close()
+    await context.close()
+  }
 }
 
 /* ==================================================================
@@ -379,6 +445,34 @@ console.log('\n=== 2. 已配置未登录：走登录流程 ===')
     otpRequests.length ? `POST ${new URL(otpRequests[0].url()).pathname}` : '没有发出请求')
   check('发送后有明确提示', (await page.locator('.toast').count()) >= 1)
 
+  /* --- 真实项目会遇到的两种情况，客户端必须自己扛住 ---
+     这两条是在真项目上实测踩出来的：
+       ① 项目关了「允许新用户注册」→ 用 shouldCreateUser:true 请求会被 422 拒掉，
+          但已注册用户其实能收链接，所以要退一步用 shouldCreateUser:false 重试；
+       ② 免费版每小时只发极少量邮件，超了就是 429，界面得把话说清楚。 */
+  audit.otpAttempts.length = 0
+  audit.otpMode = 'disabled'
+  await page.locator('[data-testid="cloud-email"]').fill('newbie@example.com')
+  await page.locator('[data-testid="cloud-magic-link"]').click()
+  await page.waitForTimeout(1200)
+  const disabledToast = (await page.locator('.toast').last().textContent().catch(() => '')) || ''
+  check('项目禁用 OTP 注册时会自动退一步重试（不建用户）',
+    audit.otpAttempts.join(',') === 'create=true,create=false',
+    `实际请求序列：${audit.otpAttempts.join(',') || '（空）'}`)
+  check('退一步重试成功后不报错', !disabledToast.includes('不允许'), disabledToast.trim().slice(0, 60))
+
+  audit.otpAttempts.length = 0
+  audit.otpMode = 'ratelimit'
+  await page.locator('[data-testid="cloud-email"]').fill('newbie@example.com')
+  await page.locator('[data-testid="cloud-magic-link"]').click()
+  await page.waitForTimeout(1200)
+  const rateToast = (await page.locator('.toast').last().textContent().catch(() => '')) || ''
+  check('发信额度用尽时给出可操作的中文提示',
+    rateToast.includes('频繁') || rateToast.includes('等一会儿'),
+    rateToast.trim().slice(0, 70))
+  audit.otpMode = 'ok'
+  audit.otpAttempts.length = 0
+
   // 密码登录：错的密码要被翻译成人话
   await page.locator('[data-testid="cloud-email"]').fill(NEW_USER.email)
   await page.locator('[data-testid="cloud-password"]').fill('wrong-password')
@@ -387,13 +481,21 @@ console.log('\n=== 2. 已配置未登录：走登录流程 ===')
   check('密码错误提示已中文化',
     (await page.locator('.toast').last().textContent().catch(() => '')).includes('邮箱或密码不对'))
 
-  // 正确密码登录 → 应该弹出「首次同步用哪边」
+  /**
+   * 正确密码登录。
+   * 这里刻意**不**要求弹「首次同步用哪边」：本机有数据、云端是空的，
+   * 答案唯一，应用应该自己判断并直接上传，而不是拿一个只有一个合理答案的问题打扰用户。
+   * （弹窗只留给真正有分歧的情况：两边都有数据。）
+   */
+  const pushCountBefore = audit.upserts.length
   await page.locator('[data-testid="cloud-email"]').fill(NEW_USER.email)
   await page.locator('[data-testid="cloud-password"]').fill('right-password')
   await page.locator('[data-testid="cloud-password-login"]').click()
-  await page.waitForTimeout(1500)
-  check('登录成功后弹出首次同步方向选择',
-    (await page.locator('.modal__title').textContent().catch(() => '')).includes('首次同步'))
+  await page.waitForTimeout(2500)
+  check('登录后自己判断并上传（云端为空，不必问用户）',
+    audit.upserts.length > pushCountBefore,
+    `写云端请求 ${audit.upserts.length - pushCountBefore} 次，弹窗数 ${await page.locator('.modal-backdrop').count()}`)
+  check('登录后账号面板出现', (await page.locator('[data-testid="cloud-account"]').count()) === 1)
   await context.close()
 }
 

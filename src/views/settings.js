@@ -662,13 +662,39 @@ async function accountPanel(ctx, user) {
 }
 
 /** 登录成功后：首次同步要用户自己选方向 */
+/**
+ * 登录成功后决定下一步该做什么。
+ *
+ * 这里原来只看 `cloudMeta().initialized`（本机有没有同步过）就弹「保留哪边」，
+ * 结果在一个很常见的场景下是危险的：**全新设备登录**时本机是空的，
+ * 用户被问「保留本机还是云端」，只要点错「保留本机」，云端那份备份就被空白覆盖了。
+ *
+ * 改成先让同步引擎自己判断（它知道本机是不是空的、云端有没有数据）：
+ *   · 能自己决定（新设备直接拉 / 云端为空直接推）→ 静默同步完，不打扰用户
+ *   · 真的分不清（两边都有数据且都改过）→ 才弹窗让用户选
+ */
 async function afterLogin(ctx) {
-  if (cloudMeta().initialized) {
-    const result = await runSync({ auto: true })
-    if (result.ok) toast(`已同步：${result.message}`, { kind: 'ok' })
+  const result = await runSync({ auto: false })
+  if (result.action === 'conflict') {
+    // 本机空、云端有数据，却被判定成冲突：也是「该拉不该问」，直接拉
+    if (isStateEmpty(state)) {
+      const pulled = await forcePull()
+      toast(pulled.ok ? '已从云端恢复你的数据' : pulled.message, {
+        kind: pulled.ok ? 'ok' : 'error',
+        ms: 5000
+      })
+      return
+    }
+    openConflictDialog(ctx)
     return
   }
-  openFirstSyncDialog(ctx)
+  if (result.ok) {
+    toast(`已同步：${result.message}`, { kind: 'ok' })
+    return
+  }
+  // 需要用户定夺的首次同步（两边都有内容）
+  if (!cloudMeta().initialized) openFirstSyncDialog(ctx)
+  else toast(result.message, { kind: 'error', ms: 6000 })
 }
 
 /** 「这份数据以谁为准」——唯一一个会覆盖数据的弹窗，所以写清楚后果 */
