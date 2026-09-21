@@ -231,7 +231,7 @@ function humanize(error, fallback = '云端操作失败') {
     return '数据库里还没有 kaoyan_data 表 —— 请先在 Supabase 里执行建表 SQL'
   }
   if (/Invalid login credentials/i.test(raw)) return '邮箱或密码不对'
-  if (/Email not confirmed/i.test(raw)) return '邮箱还没确认，请先点邮件里的确认链接'
+  if (/Email not confirmed/i.test(raw)) return '邮箱还没确认，请先点邮件里的确认链接（没收到就点「重发一封」）'
   if (/User already registered/i.test(raw)) return '这个邮箱已经注册过了，直接登录即可'
   if (/Password should be at least/i.test(raw)) return '密码至少 6 位'
   if (/email rate limit|over_email_send_rate_limit/i.test(raw)) {
@@ -394,6 +394,21 @@ export async function signInWithEmail(email, { redirectTo } = {}) {
     options: { ...options, shouldCreateUser: false }
   })
   if (second.error) throw new Error(humanize(second.error, '发送登录链接失败'))
+}
+
+/**
+ * 重发确认邮件。
+ * 项目开着「Confirm email」时，注册完必须先点邮件里的确认链接才能用密码登录，
+ * 而免费版发信额度很小，邮件丢了/没收到很常见 —— 所以界面上要能再要一封。
+ */
+export async function resendConfirmEmail(email, { redirectTo } = {}) {
+  const sb = await getClient()
+  const { error } = await sb.auth.resend({
+    type: 'signup',
+    email: String(email).trim(),
+    options: { emailRedirectTo: redirectTo || location.origin + location.pathname }
+  })
+  if (error) throw new Error(humanize(error, '重发确认邮件失败'))
 }
 
 /** 邮箱 + 密码登录 */

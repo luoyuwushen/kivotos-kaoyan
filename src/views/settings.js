@@ -34,6 +34,7 @@ import {
   signUpWithPassword,
   signOut,
   clearCloudConfig,
+  resendConfirmEmail,
   runSync,
   pullCloud,
   forcePush,
@@ -546,10 +547,23 @@ function loginForm(ctx) {
       el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '密码（可选）'), passwordInput])
     ]),
     el('div', { class: 'row' }, [magicButton, passwordLogin, passwordSignup]),
+    el('div', { class: 'row' }, [
+      el('button', {
+        class: 'btn btn--sm btn--ghost',
+        type: 'button',
+        dataset: { testid: 'cloud-resend' },
+        onClick: (event) => run(event.currentTarget, '正在重发…', async () => {
+          if (!email()) throw new Error('先填邮箱')
+          await resendConfirmEmail(email())
+          toast('确认邮件已重发，去邮箱点一下链接就能登录了', { kind: 'ok', ms: 7000 })
+        })
+      }, '没收到确认邮件？重发一封')
+    ]),
     el('div', { class: 'dim-2', style: { fontSize: '0.75rem', lineHeight: '1.7' } },
       '· 第一次用「发登录链接」最省事：Supabase 会给你发一封带链接的邮件，点一下就算登录了。' +
       '  链接只能用一次，而且只能在同一台设备的同一个浏览器里打开。\n' +
-      '· 链接一直没收到：多半是邮箱还没确认，或触发了免费额度的发信频率限制，等几分钟再试。')
+      '· 提示「邮箱还没确认」= 你的项目开着 Confirm email，先去邮件里点确认链接（没收到就点上面那个重发）。\n' +
+      '· 提示「发送太频繁」= Supabase 免费版每小时只允许发极少量邮件，等一会儿或直接用密码登录。')
   ])
 }
 
