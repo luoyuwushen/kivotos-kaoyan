@@ -370,7 +370,8 @@ function cloudCard(ctx) {
     currentUser().then(async (user) => {
       if (cancelled) return
       accountSlot.append(user ? await accountPanel(ctx, user) : loginForm(ctx))
-    })  }
+    })
+  }
   return card.node
 }
 
@@ -433,6 +434,13 @@ function setupForm(ctx) {
 function cfgSummary(ctx) {
   const cfg = cloudConfig()
   const meta = cloudMeta()
+  /**
+   * 构建期烘焙进来的配置是不允许在界面上改的（整站就指向这一个项目）。
+   * 所以这时候只显示「后端地址 + 上次同步时间」，不给「改配置」按钮 ——
+   * 点了也没用（env 优先于本地存储），留着只会让人以为能改。
+   * 本机自己填的配置（fromEnv 为假）仍然可以清掉重填。
+   */
+  const locked = Boolean(cfg.fromEnv)
   return el('div', { class: 'card card--flat', style: { padding: '0.75rem 0.875rem' } }, [
     el('div', { class: 'row', style: { justifyContent: 'space-between' } }, [
       el('div', { style: { minWidth: '0' } }, [
@@ -440,16 +448,22 @@ function cfgSummary(ctx) {
         el('div', { class: 'dim-2', style: { fontSize: '0.6875rem', marginTop: '0.2rem' } },
           meta.lastSyncedAt
             ? `上次同步：${new Date(meta.lastSyncedAt).toLocaleString('zh-CN')}（${meta.lastSyncedBy === 'push' ? '上传' : '下载'}）`
-            : `数据表：${CLOUD_TABLE}`)
+            : `数据表：${CLOUD_TABLE}`),
+        locked
+          ? el('div', { class: 'dim-2', style: { fontSize: '0.6875rem', marginTop: '0.2rem' } },
+              '后端由本站固定提供，无需（也无法）自行配置')
+          : null
       ]),
-      el('button', {
-        class: 'btn btn--sm btn--ghost',
-        type: 'button',
-        onClick: (event) => {
-          event.preventDefault()
-          clearCloudConfigAndReload(ctx)
-        }
-      }, '改配置')
+      locked
+        ? null
+        : el('button', {
+            class: 'btn btn--sm btn--ghost',
+            type: 'button',
+            onClick: (event) => {
+              event.preventDefault()
+              clearCloudConfigAndReload(ctx)
+            }
+          }, '改配置')
     ])
   ])
 }
