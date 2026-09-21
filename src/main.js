@@ -21,6 +21,7 @@ import { cloudMeta, currentUser, runSync } from './lib/cloud.js'
 import { icon, brandMark } from './components/icons.js'
 import { toast, enableSpotlight, observeReveals, openModal, REDUCED } from './components/ui.js'
 import { appFooter } from './components/footer.js'
+import { mountCloudIndicator } from './components/cloud-indicator.js'
 import { buildSnapshot, findNewlyUnlocked } from './data/medals.js'
 
 import { renderHome } from './views/home.js'
@@ -152,6 +153,10 @@ function buildShell() {
       )
     )
   }
+
+  // 云端同步入口：只有在**配置过后端**时才会挂上来。
+  // 没配后端的人看到的仍是一个纯静态、零网络请求的站点。
+  mountCloudIndicator(sidenav)
 
   const main = el('main', { class: 'main', id: 'main', tabindex: '-1' })
   const shell = el('div', { class: 'shell' }, [sidenav, main])

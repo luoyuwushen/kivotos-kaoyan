@@ -2662,3 +2662,90 @@ canvas {
   }
 }
 
+/* ==========================================================================
+   侧栏 / 底栏上的云端入口
+   只在**配置过后端**时才存在，所以没配的人完全看不到它。
+   配色与设置页的 .cloud-status 完全一致，避免同一个概念两套颜色。
+   ========================================================================== */
+
+.nav-cloud {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-alt);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease-out), background 0.18s var(--ease-out),
+    color 0.18s var(--ease-out);
+}
+
+.nav-cloud:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--accent-deep);
+}
+
+.nav-cloud__icon {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.nav-cloud__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-cloud[data-state='synced'] {
+  border-color: rgba(var(--success-rgb), 0.4);
+  background: rgba(var(--success-rgb), 0.12);
+  color: var(--success-ink);
+}
+.nav-cloud[data-state='synced'] .nav-cloud__icon {
+  color: var(--success);
+}
+
+.nav-cloud[data-state='busy'] {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-deep);
+}
+.nav-cloud[data-state='busy'] .nav-cloud__icon {
+  color: var(--accent);
+}
+
+.nav-cloud[data-state='conflict'],
+.nav-cloud[data-state='error'] {
+  border-color: rgba(var(--warning-rgb), 0.45);
+  background: rgba(var(--warning-rgb), 0.14);
+  color: var(--warning-ink);
+}
+.nav-cloud[data-state='conflict'] .nav-cloud__icon,
+.nav-cloud[data-state='error'] .nav-cloud__icon {
+  color: var(--warning);
+}
+
+/* 手机 / 平板：导航变成一条横向标签栏，云端入口要挤进同一行且不撑破布局 */
+@media (max-width: 1000px) {
+  .nav-cloud {
+    width: auto;
+    min-width: 44px;
+    margin-top: 0;
+    padding: 0.4rem 0.6rem;
+  }
+  .nav-cloud__text {
+    max-width: 7.5rem;
+  }
+}
+

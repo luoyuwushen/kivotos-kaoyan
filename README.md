@@ -179,10 +179,43 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Username 你的Gi
 |------|-----------|
 | 登录后提示「还没有 kaoyan_data 表」 | 第 1 步的建表 SQL 没执行，去 SQL Editor 跑一遍 |
 | 收不到登录邮件 | 免费额度有发信频率限制，等几分钟；或检查垃圾邮件；或改用「邮箱 + 密码」注册 |
+| 邮件里点链接回来没登录上 | 见下面「必须配的三个认证设置」第 3 条（Redirect URLs） |
 | 提示「这是 service_role key，绝对不能放在前端」 | 复制错了，要的是 **anon public** 那一行 |
 | 项目过一段时间连不上 | 免费版会在一段时间无人访问后休眠，去控制台点一下 Restore，数据不丢 |
 | 想清掉某个人留在云端的数据 | 设置 → 云端同步 → **删除云端数据**（只删服务器那一行） |
 | 想知道同步为什么没动 | 控制台执行 `localStorage.setItem('kivotos-kaoyan-cloud-debug','1')` 再刷新，会打印同步判定用的时间戳 |
+
+### 必须配的三个认证设置（漏一个就登不上）
+
+都在 **Authentication → Sign In / Providers → Email**，以及 **Authentication → URL Configuration**：
+
+| # | 位置 | 设成什么 | 不设会怎样 |
+|---|------|----------|-----------|
+| 1 | Sign In / Providers → Email | **Enable email provider** 打开 | 发不出登录邮件 |
+| 2 | 同上 → **Confirm email** | 自己用 → **关掉**（注册即登录）；给同学用 → 打开 | 开着时必须先去邮箱点确认，才能用密码登录 |
+| 3 | URL Configuration → **Redirect URLs** | 加一条本站地址，例如 `https://luoyuwushen.github.io/kivotos-kaoyan/**` | 魔法链接点回来会跳错地方，登不上 |
+
+> 第 3 条是「点了邮件里的链接、回来却还是未登录」的唯一原因，且只在用**魔法链接**时才会遇到。
+> 只想快点跑通，可以先跳过魔法链接，直接用「邮箱 + 密码」注册登录（第 1、2 条仍然要配）。
+
+### ⚠️ 中国大陆网络：浏览器需要能连上 `*.supabase.co`
+
+这条是实测出来的，不是猜的：**从大陆网络直连 `你的项目.supabase.co:443` 会失败** ——
+它挂在 Cloudflare 上，直接连接会被重置。所以：
+
+- **用这个网站的人（包括你自己）需要开着代理/VPN**，浏览器才能跟 Supabase 通信。
+  没开代理时：本地功能全部照常（数据在 localStorage 里，一分不少），只是**同步不上云**，
+  设置页的云端状态会显示同步失败。
+- 界面对这件事是安全的：连不上就是失败提示 + 本地数据不动，不会把本地数据弄丢或写坏。
+- 想彻底绕开这个限制，只有两条路：给 Supabase 项目绑**自定义域名**，或者换成国内可达的后端。
+  在此之前，把代理一直开着是最省事的做法。
+
+> 顺带说一句，命令行验证也要走代理。Node 24 支持这样跑（其他版本请自行配代理）：
+>
+> ```powershell
+> $env:NODE_USE_ENV_PROXY='1'; $env:HTTPS_PROXY='http://127.0.0.1:7897'
+> npm run test:cloud:live
+> ```
 
 ---
 

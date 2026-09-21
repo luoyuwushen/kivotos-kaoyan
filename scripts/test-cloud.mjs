@@ -326,6 +326,12 @@ console.log('\n=== 1. 未配置云端：不打扰，且有引导 ===')
 
   check('未配置时不产生任何 Supabase 请求', audit.selects.length === 0 && audit.upserts.length === 0)
   check('未配置时设置页无控制台报错', errors.length === 0, errors.slice(0, 2).join(' | '))
+
+  // 侧栏 / 底栏的云端入口：没配后端就必须完全不存在，否则会让人以为「这站需要账号」
+  const navCloud = await page.locator('[data-testid="nav-cloud"]').count()
+  check('未配置时导航里没有云端入口（保持纯静态观感）', navCloud === 0, `找到 ${navCloud} 个`)
+  const navItems = await page.locator('.nav-item[data-view]').count()
+  check('未配置时导航仍是 8 项', navItems === 8, `${navItems} 项`)
   await context.close()
 }
 
@@ -345,6 +351,21 @@ console.log('\n=== 2. 已配置未登录：走登录流程 ===')
   check('已配置时显示项目 URL', (await page.locator('.mono').first().textContent()).includes(FAKE_URL))
   check('给出登录表单', (await page.locator('[data-testid="cloud-login"]').count()) === 1)
   check('登录状态显示为未登录', (await page.locator('.cloud-status').first().textContent()).includes('未登录'))
+
+  // 导航里的云端入口：配了后端才出现，并且能点进设置
+  const navCloud = page.locator('[data-testid="nav-cloud"]')
+  check('已配置但未登录时，导航里出现云端入口', (await navCloud.count()) === 1)
+  const navCloudText = (await navCloud.textContent()) || ''
+  check('导航入口显示未登录云端', navCloudText.includes('未登录'), navCloudText.trim())
+  check('导航入口带状态色（data-state）', (await navCloud.getAttribute('data-state')) === 'off',
+    String(await navCloud.getAttribute('data-state')))
+  await page.goto(`${BASE}#home`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(800)
+  await page.locator('[data-testid="nav-cloud"]').click()
+  await page.waitForTimeout(700)
+  check('点导航入口直达设置页', page.url().endsWith('#settings'), page.url())
+  await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(600)
 
   // 魔法链接
   const otpRequests = []
@@ -393,6 +414,13 @@ console.log('\n=== 3. 首次同步（本地有数据 → 上传） ===')
   check('已登录时显示账号面板', (await page.locator('[data-testid="cloud-account"]').count()) === 1)
   check('账号面板显示邮箱', (await page.locator('[data-testid="cloud-account"]').textContent()).includes(USER_A.email))
   check('账号面板显示 user_id', (await page.locator('[data-testid="cloud-account"]').textContent()).includes(USER_A.id))
+
+  // 导航入口要跟着登录状态走：登录后应显示「已连接 + 邮箱片段」
+  const navText = (await page.locator('[data-testid="nav-cloud"]').textContent()) || ''
+  check('登录后导航入口显示已连接', navText.includes('已连接'), navText.trim())
+  check('导航入口状态色变为 synced',
+    (await page.locator('[data-testid="nav-cloud"]').getAttribute('data-state')) === 'synced',
+    String(await page.locator('[data-testid="nav-cloud"]').getAttribute('data-state')))
 
   await page.locator('[data-testid="cloud-first-sync"]').click()
   await page.waitForTimeout(500)

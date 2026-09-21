@@ -145,9 +145,14 @@ if (!reachable) {
 }
 
 /* 3. 注册两个一次性账号 */
+// 邮箱域名有讲究：Supabase 会校验域名有效性，`@example.com` 这类会被直接拒掉
+// （error_code: email_address_invalid）。这里用项目自己的域名加个 test. 前缀 ——
+// 既能通过校验，又不可能真的投递到别人邮箱里。
 const stamp = Date.now().toString(36)
-const userA = { email: `kaoyan-live-test-${stamp}-a@example.com`, password: `Kaoyan-${stamp}-Aa1` }
-const userB = { email: `kaoyan-live-test-${stamp}-b@example.com`, password: `Kaoyan-${stamp}-Bb2` }
+const projectRef = new URL(URL_).hostname.split('.')[0]
+const mailDomain = `test.${projectRef}.supabase.co`
+const userA = { email: `kaoyan-live-${stamp}-a@${mailDomain}`, password: `Kaoyan-${stamp}-Aa1` }
+const userB = { email: `kaoyan-live-${stamp}-b@${mailDomain}`, password: `Kaoyan-${stamp}-Bb2` }
 const sessions = {}
 
 async function signUpAndLogin(user, label) {
