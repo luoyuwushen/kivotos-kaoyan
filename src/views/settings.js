@@ -554,8 +554,6 @@ function loginForm(ctx) {
   }, '注册新账号')
 
   return el('div', { class: 'stack', dataset: { testid: 'cloud-login' } }, [
-    el('div', { class: 'dim', style: { fontSize: '0.8125rem', lineHeight: '1.75' } },
-      '登录只是为了拿到一个属于你的 user_id：数据按这个 id 隔离，谁也看不到谁的。不需要填手机号、不收集其他信息。'),
     el('div', { class: 'grid-auto' }, [
       el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '邮箱'), emailInput]),
       el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '密码（可选）'), passwordInput])
