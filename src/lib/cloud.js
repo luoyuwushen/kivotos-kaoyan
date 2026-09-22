@@ -237,6 +237,12 @@ function humanize(error, fallback = '云端操作失败') {
   if (/email rate limit|over_email_send_rate_limit/i.test(raw)) {
     return '登录邮件发送太频繁了 —— Supabase 免费版每小时只允许发少量邮件，等一会儿再试，或改用「邮箱 + 密码」注册登录'
   }
+  if (/Auth session missing|session_not_found|invalid claim|token has expired/i.test(raw)) {
+    return '这个链接已经失效或过期了，请重新回到登录页再发一封重置邮件'
+  }
+  if (/same.*password|should be different from the old password/i.test(raw)) {
+    return '新密码不能和旧密码一样，换一个吧'
+  }
   if (/otp_disabled|Signups not allowed/i.test(raw)) {
     return '这个项目不允许用登录链接注册新账号 —— 请到 Authentication → Sign In / Providers → Email 打开「Allow new users to sign up」，或改用「邮箱 + 密码」注册'
   }
@@ -263,10 +269,59 @@ function humanize(error, fallback = '云端操作失败') {
 let sessionCache = { loaded: false, user: null }
 let sessionInflight = null
 
+/**
+ * 「这次拿到会话，是因为点了重置密码的邮件链接」。
+ *
+ * 为什么要有这个旗标：重置链接点回来时，SDK 兑换完 code 会**真的建出一个会话**
+ * （PASSWORD_RECOVERY 事件），跟正常登录在数据层上完全一样。如果只看「有没有用户」，
+ * 界面就会在这时候把用户直接放进应用里，重置密码这一步等于被跳过了。
+ * 所以这里单独记一笔：这次会话是「临时」的，只够拿来改密码，改完要重新登录。
+ *
+ * 消费式读取（consume）：读一次就销掉，避免下次正常打开时还停在改密码页。
+ */
+let recoveryMode = false
+const recoveryWatchers = new Set()
+
+/** 当前是否处于「从邮件链接回来改密码」的状态 */
+export function passwordRecovery() {
+  return recoveryMode
+}
+
+/**
+ * 订阅重置密码状态的变化。
+ * 界面上要在「邮件里点回来」的瞬间切到改密码那一步，就必须能收到这个通知 ——
+ * 那一刻 user_id 是从无到有，watchSession 也会回调，但两条流的语义不同，分开更清楚。
+ */
+export function watchPasswordRecovery(fn) {
+  recoveryWatchers.add(fn)
+  try {
+    fn(recoveryMode)
+  } catch (err) {
+    console.error('[cloud] 重置密码订阅回调出错', err)
+  }
+  return () => recoveryWatchers.delete(fn)
+}
+
+function setRecoveryMode(on) {
+  const next = Boolean(on)
+  if (recoveryMode === next) return
+  recoveryMode = next
+  for (const fn of recoveryWatchers) {
+    try {
+      fn(recoveryMode)
+    } catch (err) {
+      console.error('[cloud] 重置密码订阅回调出错', err)
+    }
+  }
+}
+
 function rememberSession(user) {
   const changed = (sessionCache.user?.id || '') !== (user?.id || '')
   sessionCache = { loaded: true, user: user || null }
   if (changed) {
+    // 改密码用的临时会话一旦结束（改完了 / 退出了 / 过期了），旗标要跟着落下去，
+    // 否则用户重新登录后还会被按回改密码那一页。
+    if (!sessionCache.user) setRecoveryMode(false)
     for (const fn of sessionWatchers) {
       try {
         fn(sessionCache.user)
@@ -348,13 +403,21 @@ let authBridgeBound = false
 /**
  * 把 SDK 的认证事件接到会话缓存上。
  * 整个应用只桥接一次 —— 这正是「只订阅一次」的落点。
+ *
+ * `event` 不能丢：**只有 PASSWORD_RECOVERY 能区分「点了重置密码的邮件」和「正常登录」**。
+ * PKCE 流程下链接里只有 `?code=`，类型是服务端兑换 token 时才告诉 SDK 的，
+ * 所以「看 URL 上有没有 type=recovery」这条路走不通，必须读事件名。
  */
 async function bindAuthBridge() {
   if (authBridgeBound || !isCloudConfigured()) return
   authBridgeBound = true
   try {
     const sb = await getClient()
-    sb.auth.onAuthStateChange((_event, session) => {
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        stripAuthParamsFromUrl()
+        setRecoveryMode(true)
+      }
       const user = session?.user ? { id: session.user.id, email: session.user.email || '' } : null
       // 已初始化过、且身份没变 → 不进会话缓存，也就不通知任何人（避免自激）
       if (sessionCache.loaded && (sessionCache.user?.id || '') === (user?.id || '')) return
@@ -363,6 +426,32 @@ async function bindAuthBridge() {
   } catch (err) {
     authBridgeBound = false
     console.warn('[cloud] 认证桥接失败', err)
+  }
+}
+
+/**
+ * 清掉地址栏里的 `?code=` / `?error=` 等回跳参数。
+ *
+ * 为什么要主动清：登录链接点回来后地址栏会留着 `?code=xxx`，用户按一次刷新，
+ * SDK 会再拿这个已经被兑换过的 code 去换一次 token，换来的是一句
+ * `invalid request: both auth code and code verifier should be non-empty` —— 看起来像登录坏了，
+ * 其实只是旧链接被用了第二次。改完密码那一步尤其容易触发（用户会习惯性刷新）。
+ * history.replaceState 直接换掉当前历史项，不留记录、不触发 hashchange。
+ */
+export function stripAuthParamsFromUrl() {
+  try {
+    const url = new URL(location.href)
+    const doomed = ['code', 'error', 'error_code', 'error_description', 'type', 'state']
+    let hit = false
+    for (const key of doomed) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.delete(key)
+        hit = true
+      }
+    }
+    if (hit) history.replaceState(null, '', url.pathname + url.search + url.hash)
+  } catch {
+    /* 地址栏清理失败不影响任何功能 */
   }
 }
 
@@ -441,8 +530,47 @@ export async function signUpWithPassword(email, password, { redirectTo } = {}) {
 export async function signOut() {
   const sb = await getClient()
   await sb.auth.signOut()
+  setRecoveryMode(false)
+  stripAuthParamsFromUrl()
   await refreshSession()
   patchCloudMeta({ userId: '', email: '', initialized: false, lastSyncedAt: '', lastSyncedBy: '' })
+}
+
+/* ---------------- 忘记密码 / 重置密码 ---------------- */
+
+/**
+ * 回跳地址。
+ *
+ * 注意**不要带 hash**：本站用 hash 做路由，而地址栏里带上 `#login` 之后再让
+ * Supabase 追加 `?code=…` 拼出来的链接是不合法的。这里只回站点根路径，
+ * 由应用自己按「有没有会话 + 有没有重置旗标」决定显示哪一屏。
+ */
+export function authRedirectUrl() {
+  return location.origin + location.pathname
+}
+
+/**
+ * 发「重置密码」邮件。
+ * 用户点邮件里的链接回来时，SDK 会建一个**临时会话**并派发 PASSWORD_RECOVERY，
+ * 应用据此把界面切到「设置新密码」那一步（见 passwordRecovery()）。
+ */
+export async function resetPasswordForEmail(email, { redirectTo } = {}) {
+  const sb = await getClient()
+  const { error } = await sb.auth.resetPasswordForEmail(String(email).trim(), {
+    redirectTo: redirectTo || authRedirectUrl()
+  })
+  if (error) throw new Error(humanize(error, '发送重置密码邮件失败'))
+}
+
+/**
+ * 设置新密码。
+ * 这里用的是重置链接带回来的那个临时会话；改完由调用方决定是留下还是退出。
+ */
+export async function updatePassword(newPassword) {
+  const sb = await getClient()
+  const { error } = await sb.auth.updateUser({ password: String(newPassword) })
+  if (error) throw new Error(humanize(error, '设置新密码失败'))
+  await refreshSession()
 }
 
 /* ---------------- 读写云端 ---------------- */

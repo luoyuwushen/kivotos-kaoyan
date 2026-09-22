@@ -23,6 +23,7 @@ Thumbs.db
 
 # 临时排查脚本：下划线开头，用完就删，别让它们混进提交
 scripts/_*.mjs
+auth-config-error.json
 
 # 本地环境变量（如果有）
 .env
