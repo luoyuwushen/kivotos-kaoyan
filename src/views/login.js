@@ -22,7 +22,7 @@
  */
 
 import { el, examCountdown, formatDateCN, daysBetween } from '../lib/utils.js'
-import { state, PHASE_TEMPLATE } from '../lib/store.js'
+import { state, PHASE_TEMPLATE, sessionTitleOf } from '../lib/store.js'
 import { icon, brandMark } from '../components/icons.js'
 import { toast } from '../components/ui.js'
 import {
@@ -35,12 +35,25 @@ import {
   resetPasswordForEmail,
   updatePassword,
   resendConfirmEmail,
+  needsEmailConfirm,
   signOut,
   cloudConfig
 } from '../lib/cloud.js'
 
 /** 四个步骤的 hash，同时就是可收藏、可前进后退的地址 */
 export const AUTH_ROUTES = ['login', 'signup', 'forgot', 'reset']
+
+/**
+ * 开发用探针路由（`#scene`）。
+ *
+ * `#scene` 是移植阶段留下来的调试入口：Spine 骨架里到底有哪些动画名，
+ * 只有真把它读出来才知道，所以做了一页能直接打开看效果、点着播的探针。
+ * 它不属于认证流程，但必须让路由认得它 —— 否则「未登录 → 地址收敛到 #login」
+ * 那条规则会把 `#scene` 一起吃掉。
+ *
+ * 移植收尾时把这一项和 main.js 里的 DEV_HASHES 分支一起删掉即可。
+ */
+export const DEV_ROUTES = ['scene']
 
 /**
  * 登录成功的那一刻要通知外面「可以装外壳了」。
@@ -66,6 +79,30 @@ let carryNote = ''
 /** 上一屏用户填过的邮箱：切步骤时带过去，不用重打一遍 */
 let lastEmail = ''
 
+/**
+ * 从别处往登录屏递一句话。
+ *
+ * 用在「退出登录」上：退出之后界面被登录屏接管，这时候弹一个 toast 是来不及的 ——
+ * 它会被渲染的时机冲掉，或者和「登录状态已失效」叠在一起，谁都看不清。
+ * 写在登录屏自己的提示条里，位置固定、不会被挤掉。
+ */
+export function setAuthNotice(text) {
+  carryNote = String(text || '')
+}
+
+/**
+ * 把邮箱记下来。
+ *
+ * 原来的写法是「提交成功时才记」，结果最普通的一个动作反而丢了：
+ * 填好邮箱、直接点「还没有账号？去注册」—— 没提交过，于是注册屏是空的。
+ * 所以现在两处都记：输入框边打边记，切换步骤前再兜一次底。
+ */
+function rememberEmail(fieldRef) {
+  const value = String(fieldRef?.input?.value || '').trim()
+  if (value) lastEmail = value
+  return lastEmail
+}
+
 export function renderLogin(ctx) {
   const mode = AUTH_ROUTES.includes(ctx.route) ? ctx.route : passwordRecovery() ? 'reset' : 'login'
   const note = carryNote
@@ -87,13 +124,16 @@ export function renderLogin(ctx) {
 }
 
 /**
- * 天空层。复用主站那套 `.bg-*`（天顶渐变 + 天光 + 斜射光柱 + 云带 + 细网格），
+ * 天空层。复用主站那套 `.bg-*`（天光 + 斜射光柱 + 云带 + 细网格），
  * 但光柱压到两条：登录页要让人一眼找到输入框，不是来看风景的。
+ *
+ * **不要**在这里再放一个 `.bg-sky`：那是主站的整页天色，它是 `absolute; inset:0` 的实心层，
+ * 会把 `.auth__sky` 自己的渐变整个盖掉 —— 而登录屏的天色是按"白字压在前 42%"反推过的，
+ * 被盖掉之后屏幕上就是主站那套更浅的天色，全屏白字对比度直接掉到 2.2:1。
  */
 function authBackdrop() {
   const layer = el('div', { class: 'auth__sky', 'aria-hidden': 'true' })
   layer.append(
-    el('div', { class: 'bg-sky' }),
     el('div', { class: 'bg-bloom bg-bloom--sun' }),
     el('div', { class: 'bg-ray', style: { left: '12%' } }),
     el('div', { class: 'bg-ray bg-ray--2', style: { left: '56%' } }),
@@ -107,14 +147,21 @@ function authBackdrop() {
 
 function briefing() {
   const cd = examCountdown(state.profile.examDate)
-  const total = Math.max(daysBetween(new Date(), state.profile.examDate), 1)
-  // 走完多少：按「从今天到初试」的总天数反推，和首页口径一致
-  const walked = Math.min(Math.max(Math.round(((460 - cd.days) / 460) * 100), 0), 100)
+  // 备考进度：起点取 profile.studyStartDate（首次设置初试日期时自动记下），与首页口径一致。
+  // 之前是 (460 - days)/460 硬算，等于假设备考期固定 460 天，一改初试日期这个百分比就失真。
+  const startKey = state.profile.studyStartDate || ''
+  let walked = null
+  if (startKey) {
+    const totalSpan = Math.max(daysBetween(startKey, state.profile.examDate), 1)
+    const doneSpan = Math.max(daysBetween(startKey, new Date()), 0)
+    walked = Math.min(Math.max(Math.round((doneSpan / totalSpan) * 100), 0), 100)
+  }
 
   const label = el(
     'p',
     { class: 'auth-mission__label' },
-    `距 28 考研初试（${formatDateCN(state.profile.examDate, false)}）还有`
+    // 届数从初试日期推导（2027-12-26 → 28考研），不写死，改日期会自动跟着变
+    `距 ${sessionTitleOf(state.profile.examDate)}初试（${formatDateCN(state.profile.examDate, false)}）还有`
   )
 
   const num = el('div', { class: 'auth-mission__num num' }, [
@@ -122,27 +169,27 @@ function briefing() {
     el('span', { class: 'countdown__unit' }, '天')
   ])
 
-  // 光环：和首页同一枚签名图形，只是小一号
+  // 光环：和首页同一枚签名图形，只是小一号；跟着放大后的数字一起变大
   const halo = el('div', {
     class: 'halo auth-mission__halo',
-    style: { width: '150px', height: '150px', left: '4.5rem', top: '46%', marginLeft: '-75px', marginTop: '-75px' }
+    style: { width: '196px', height: '196px', left: '5.5rem', top: '48%', marginLeft: '-98px', marginTop: '-98px' }
   })
 
-  const countdown = el('div', { class: 'auth-mission__count' }, [halo, label, num])
-
   return el('section', { class: 'auth-mission' }, [
-    el('div', {}, [
-      el('div', { class: 'auth-brand' }, [
-        brandMark(38),
-        el('div', {}, [
-          el('p', { class: 'auth-brand__title' }, state.profile.siteName || '基沃托斯作战本部'),
-          el('p', { class: 'auth-brand__sub' }, '28 考研 · 学园事务局')
-        ])
-      ]),
-      countdown
+    el('div', { class: 'auth-brand' }, [
+      brandMark(42),
+      el('div', {}, [
+        el('p', { class: 'auth-brand__title' }, state.profile.siteName || '基沃托斯作战本部'),
+        el('p', { class: 'auth-brand__sub' }, `${sessionTitleOf(state.profile.examDate)} · 学园事务局`)
+      ])
     ]),
+    el('div', { class: 'auth-mission__count' }, [halo, label, num]),
     el('div', { class: 'auth-mission__foot' }, [
-      el('p', { class: 'auth-mission__meta' }, `全程 ${total} 天 · 已走过 ${walked}%`),
+      // 没设备考起点就不显示百分比（不能留个 null% 或 NaN%）
+      el('p', { class: 'auth-mission__meta' },
+        walked === null
+          ? `初试在 ${String(state.profile.examDate).slice(0, 4)} 年 12 月`
+          : `全程 ${Math.max(daysBetween(new Date(), state.profile.examDate), 1)} 天 · 已走过 ${walked}%`),
       phaseStrip(walked)
     ])
   ])
@@ -150,24 +197,31 @@ function briefing() {
 
 /**
  * 阶段长条：四段按 PHASE_TEMPLATE 的比例分宽，走过的部分填实。
- * 这是左栏里唯一一处「图形即信息」，也在提醒用户：这站是按阶段排计划的。
+ * 这是左栏里唯一一处「图形即信息」，也在提醒用户：这站是按四个阶段排计划的。
+ * 每段下面标出阶段名 —— 不标的话四条色带只是装饰，标了才知道是"基础 / 强化 / 冲刺 / 模考"。
  */
 function phaseStrip(walked) {
-  const strip = el('div', { class: 'auth-phases', 'aria-hidden': 'true' })
+  // walked 可能是 null（用户还没设备考起点），这时不画进度，只留四条色带当图例
+  const pct = walked === null ? 0 : walked
+  const track = el('div', { class: 'auth-phases' })
+  const bar = el('div', { class: 'auth-phases__bar' })
+
   for (const tpl of PHASE_TEMPLATE) {
-    strip.append(
-      el('span', {
-        class: 'auth-phases__seg',
-        style: {
-          flex: String(tpl.ratio),
-          background: tpl.color,
-          opacity: walked >= 100 ? '1' : '0.42'
-        }
-      })
-    )
+    bar.append(el('span', { class: 'auth-phases__seg', style: { flex: String(tpl.ratio), background: tpl.color } }))
   }
-  const fill = el('span', { class: 'auth-phases__fill', style: { width: `${walked}%` } })
-  return el('div', { class: 'auth-phases__track' }, [strip, fill])
+  if (walked !== null) {
+    // 走过的那一段压一层半透明深色，比"每段各自调透明度"更好读
+    bar.append(el('span', { class: 'auth-phases__fill', style: { width: `${pct}%` } }))
+    // 当前位置标记：一根竖线，说明今天在哪儿（不是进度条，是时间轴）
+    bar.append(el('span', { class: 'auth-phases__now', style: { left: `${pct}%` } }))
+  }
+
+  const legend = el('div', { class: 'auth-phases__legend' }, PHASE_TEMPLATE.map((tpl) =>
+    el('span', { style: { flex: String(tpl.ratio) } }, tpl.name)
+  ))
+
+  track.append(bar, legend)
+  return track
 }
 
 /* ---------------- 右栏：事务局窗口 ---------------- */
@@ -202,6 +256,7 @@ function loginPanel(ctx) {
     autocomplete: 'email',
     placeholder: 'you@example.com',
     value: lastEmail,
+    remember: true,
     testid: 'auth-email'
   })
   const password = field('密码', {
@@ -229,8 +284,18 @@ function loginPanel(ctx) {
       entered(user, '登录成功')
     },
     footer: el('div', { class: 'auth-links' }, [
-      el('button', { class: 'auth-link', type: 'button', onClick: () => ctx.go('forgot') }, '忘记密码'),
-      el('button', { class: 'auth-link', type: 'button', onClick: () => ctx.go('signup') }, '还没有账号？去注册')
+      el('button', {
+        class: 'auth-link',
+        type: 'button',
+        dataset: { testid: 'auth-to-forgot' },
+        onClick: () => ctx.go('forgot')
+      }, '忘记密码'),
+      el('button', {
+        class: 'auth-link',
+        type: 'button',
+        dataset: { testid: 'auth-to-signup' },
+        onClick: () => ctx.go('signup')
+      }, '还没有账号？去注册')
     ])
   })
 
@@ -244,10 +309,10 @@ function loginPanel(ctx) {
 /**
  * 免密码登录链接。
  * 这是原来设置页里的主路径，保留下来做备选：忘了密码又不想重置、或邮箱收确认信有问题时，
- * 它是最省事的入口。放在密码表单下面，因为它不该抢主按钮的位置。
+ * 它是最省事的入口。放在密码表单下面一个独立的小块里，不跟「忘记密码 / 去注册」抢注意力。
  */
 function magicLinkBlock(ctx) {
-  const button = el('button', {
+  const send = el('button', {
     class: 'auth-link',
     type: 'button',
     dataset: { testid: 'auth-magic-link' },
@@ -259,9 +324,9 @@ function magicLinkBlock(ctx) {
         emailInput?.focus()
         return
       }
-      const original = button.textContent
-      button.disabled = true
-      button.textContent = '正在发送…'
+      const original = send.textContent
+      send.disabled = true
+      send.textContent = '正在发送…'
       try {
         lastEmail = mail
         await signInWithEmail(mail)
@@ -269,32 +334,52 @@ function magicLinkBlock(ctx) {
       } catch (err) {
         toast(err.message, { kind: 'error', ms: 6000 })
       } finally {
-        button.disabled = false
-        button.textContent = original
+        send.disabled = false
+        send.textContent = original
       }
     }
-  }, '不发密码，改用邮箱登录链接')
+  }, '发一封登录链接')
+
+  /**
+   * 「重发注册确认邮件」按钮：**只在项目真的开着邮箱验证时才挂上来**。
+   *
+   * 为什么不是无条件显示：本站的 Supabase 已经把 Confirm email 关掉了
+   * （mailer_autoconfirm = true），注册完直接就能登录。这时候还摆一个
+   * 「重发注册确认邮件」在那里，用户会以为「我是不是还得去收一封信」，
+   * 白白多一步。needsEmailConfirm() 直接问项目要这个设置，为假就不渲染。
+   *
+   * 拿不到设置（离线 / 被拦）时返回 null，这时仍然显示 —— 宁可多一个没用的
+   * 按钮，也不要让人在真的需要确认邮件时找不到入口。
+   */
+  const resend = el('button', {
+    class: 'auth-link',
+    type: 'button',
+    dataset: { testid: 'auth-resend' },
+    onClick: async () => {
+      const mail = (document.querySelector('[data-testid="auth-email"]')?.value || lastEmail).trim()
+      if (!mail) {
+        toast('先在上面填好邮箱', { kind: 'info' })
+        return
+      }
+      try {
+        await resendConfirmEmail(mail)
+        toast('确认邮件已重发，点邮件里的链接就能登录了', { kind: 'ok', ms: 7000 })
+      } catch (err) {
+        toast(err.message, { kind: 'error', ms: 6000 })
+      }
+    }
+  }, '重发注册确认邮件')
+  resend.hidden = true
+
+  const altRow = el('div', { class: 'auth-alt__row' }, [send, resend])
+  needsEmailConfirm().then((needed) => {
+    // null = 问不到，保守显示；false = 项目已关邮箱验证，不显示
+    if (needed !== false) resend.hidden = false
+  })
 
   return el('div', { class: 'auth-alt' }, [
-    el('button', {
-      class: 'auth-link',
-      type: 'button',
-      dataset: { testid: 'auth-resend' },
-      onClick: async () => {
-        const mail = (document.querySelector('[data-testid="auth-email"]')?.value || lastEmail).trim()
-        if (!mail) {
-          toast('先在上面填好邮箱', { kind: 'info' })
-          return
-        }
-        try {
-          await resendConfirmEmail(mail)
-          toast('确认邮件已重发，点邮件里的链接就能登录了', { kind: 'ok', ms: 7000 })
-        } catch (err) {
-          toast(err.message, { kind: 'error', ms: 6000 })
-        }
-      }
-    }, '注册后一直没收到确认邮件？重发一封'),
-    button
+    el('p', { class: 'auth-alt__lead' }, '不想输密码？'),
+    altRow
   ])
 }
 
@@ -307,6 +392,7 @@ function signupPanel(ctx) {
     autocomplete: 'email',
     placeholder: 'you@example.com',
     value: lastEmail,
+    remember: true,
     testid: 'auth-email'
   })
   const password = field('密码', {
@@ -350,7 +436,12 @@ function signupPanel(ctx) {
       entered(user, '账号已建好，欢迎')
     },
     footer: el('div', { class: 'auth-links' }, [
-      el('button', { class: 'auth-link', type: 'button', onClick: () => ctx.go('login') }, '已经有账号了？去登录')
+      el('button', {
+        class: 'auth-link',
+        type: 'button',
+        dataset: { testid: 'auth-to-login' },
+        onClick: () => ctx.go('login')
+      }, '已经有账号了？去登录')
     ])
   })
 
@@ -369,6 +460,7 @@ function forgotPanel(ctx) {
     autocomplete: 'email',
     placeholder: 'you@example.com',
     value: lastEmail,
+    remember: true,
     testid: 'auth-email'
   })
 
@@ -385,7 +477,12 @@ function forgotPanel(ctx) {
       ctx.go('login')
     },
     footer: el('div', { class: 'auth-links' }, [
-      el('button', { class: 'auth-link', type: 'button', onClick: () => ctx.go('login') }, '想起来了，回去登录')
+      el('button', {
+        class: 'auth-link',
+        type: 'button',
+        dataset: { testid: 'auth-to-login' },
+        onClick: () => ctx.go('login')
+      }, '想起来了，回去登录')
     ])
   })
 
@@ -442,6 +539,7 @@ function resetPanel(ctx) {
       el('button', {
         class: 'auth-link',
         type: 'button',
+        dataset: { testid: 'auth-reset-cancel' },
         onClick: async () => {
           await signOut()
           ctx.go('login')
@@ -481,6 +579,16 @@ function field(label, opts = {}) {
   const error = el('p', { class: 'auth-field__error', id: `${id}-error`, hidden: true })
   const hint = opts.hint ? el('p', { class: 'auth-field__hint' }, opts.hint) : null
 
+  // 邮箱边打边记：这样「填了邮箱直接点了去注册」也不会把这行白填
+  if (opts.remember) {
+    input.addEventListener('input', () => {
+      lastEmail = input.value.trim()
+    })
+    input.addEventListener('change', () => {
+      lastEmail = input.value.trim()
+    })
+  }
+
   const described = [hint ? `${id}-hint` : '', `${id}-error`].filter(Boolean).join(' ')
   input.setAttribute('aria-describedby', described)
   if (hint) hint.id = `${id}-hint`
@@ -488,10 +596,16 @@ function field(label, opts = {}) {
   const body = el('div', { class: 'auth-field__body' }, [input])
 
   if (opts.reveal) {
-    // 睁眼 / 闭眼两个图标都在 DOM 里，只切显隐 —— 换 innerHTML 会丢掉焦点位置
+    /**
+     * 睁眼 / 闭眼两个图标都在 DOM 里，只切显隐 —— 换 innerHTML 会丢掉焦点位置。
+     *
+     * 注意别用 el.hidden = true 来切：<svg> 是 SVGElement，
+     * `hidden` 在它身上**不是**那个会反射成属性、并被 [hidden]{display:none} 命中的 IDL 属性。
+     * 实际现象是：属性没写上、CSS 也不生效，两个图标同时画在按钮里。
+     * 所以这里老老实实用 class + display:none。
+     */
     const open = icon('eye', { size: 18 })
-    const shut = icon('eyeOff', { size: 18 })
-    shut.hidden = true
+    const shut = icon('eyeOff', { size: 18, className: 'is-hidden' })
     const toggle = el('button', {
       class: 'auth-field__peek',
       type: 'button',
@@ -501,8 +615,8 @@ function field(label, opts = {}) {
       onClick: () => {
         const revealed = input.type === 'text'
         input.type = revealed ? 'password' : 'text'
-        open.hidden = !revealed
-        shut.hidden = revealed
+        open.classList.toggle('is-hidden', !revealed)
+        shut.classList.toggle('is-hidden', revealed)
         toggle.setAttribute('aria-pressed', String(!revealed))
         toggle.setAttribute('aria-label', revealed ? '显示密码' : '隐藏密码')
         toggle.title = revealed ? '显示密码' : '隐藏密码'

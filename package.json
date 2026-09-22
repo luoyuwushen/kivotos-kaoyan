@@ -27,6 +27,8 @@
     "vite": "^7.1.0"
   },
   "dependencies": {
+    "@esotericsoftware/spine-core": "^4.2.120",
+    "@esotericsoftware/spine-webgl": "^4.2.120",
     "@supabase/supabase-js": "^2.116.0"
   }
 }

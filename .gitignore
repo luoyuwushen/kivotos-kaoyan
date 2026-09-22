@@ -1,6 +1,8 @@
-﻿# 依赖与构建产物
+# 依赖与构建产物
 node_modules/
 dist/
+# 本地验证用的构建副本（跑线上验证时临时生成，不该进仓库）
+dist-verify/
 .vite/
 
 # 本地验证截图与对照图（体积大，不进仓库；要归档的图放 docs/screenshots）
@@ -9,6 +11,9 @@ dist/
 smoke-shots/
 live-final/
 live-verify/
+ui-*.png
+shittim-scene-report.txt
+skel-header-report.txt
 
 # 设计调研资料（从官网抓的原始素材，几十 MB，只作本地参考，不进仓库也不部署）
 _ba_research/
@@ -21,8 +26,11 @@ ba-recon/
 Thumbs.db
 *.log
 
-# 临时排查脚本：下划线开头，用完就删，别让它们混进提交
+# 临时排查脚本与产物：下划线或点开头，用完就删，别混进提交
 scripts/_*.mjs
+scripts/_*.py
+scripts/.scene-probe.cjs
+scripts/probe-*.mjs
 auth-config-error.json
 
 # 本地环境变量（如果有）

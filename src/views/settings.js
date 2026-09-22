@@ -13,10 +13,13 @@ import {
   resetAll,
   stats,
   todayKey,
-  STORAGE_KEY
+  STORAGE_KEY,
+  examSession,
+  setStudyStartDate
 } from '../lib/store.js'
 import { icon } from '../components/icons.js'
 import { toast, openModal, confirmDialog } from '../components/ui.js'
+import { setAuthNotice } from './login.js'
 import { CHARACTERS, resetCustomImageCache } from '../components/characters.js'
 import { isAiReady, aiConfig } from '../lib/ai.js'
 import { MATH_SCOPE } from '../data/syllabus.js'
@@ -84,11 +87,30 @@ function examCard(ctx) {
     value: String(state.profile.dailyGoalMin || 360)
   })
 
+  // 届数实时预览：改初试日期时立刻显示会变成哪一届
+  const sessionHint = el('div', {
+    class: 'dim-2',
+    style: { fontSize: '0.75rem', marginTop: '0.25rem' }
+  }, sessionHintText(state.profile.examDate))
+
+  const startInput = el('input', {
+    class: 'input',
+    type: 'date',
+    value: state.profile.studyStartDate || ''
+  })
+  startInput.addEventListener('change', () => {
+    setStudyStartDate(startInput.value)
+    toast('备考起点已更新，首页的「已走过 x%」会跟着变', { kind: 'ok' })
+    ctx.refresh()
+  })
+
   nicknameInput.addEventListener('change', () => { updateProfile({ nickname: nicknameInput.value.trim() || 'Sensei' }); toast('已保存', { kind: 'ok' }); ctx.refresh() })
   siteInput.addEventListener('change', () => { updateProfile({ siteName: siteInput.value.trim() || '基沃托斯作战本部' }); toast('已保存', { kind: 'ok' }); ctx.refresh() })
   dateInput.addEventListener('change', () => {
-    updateProfile({ examDate: dateInput.value || state.profile.examDate })
-    toast('初试日期已更新，倒计时会立刻跟着变', { kind: 'ok' })
+    const next = dateInput.value || state.profile.examDate
+    updateProfile({ examDate: next })
+    sessionHint.textContent = sessionHintText(next)
+    toast(`初试日期已更新，届数与倒计时都跟着变了：${sessionTitleOf(next)}`, { kind: 'ok', ms: 3500 })
     ctx.refresh()
   })
   setSelect.addEventListener('change', () => { updateProfile({ subjectSet: setSelect.value }); toast('已切换', { kind: 'ok' }); ctx.refresh() })
@@ -98,7 +120,17 @@ function examCard(ctx) {
     el('div', { class: 'grid-auto' }, [
       el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '称呼'), nicknameInput]),
       el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '站点名称'), siteInput]),
-      el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '初试日期'), dateInput]),
+      el('label', { class: 'field' }, [
+        el('span', { class: 'field__label' }, '初试日期'),
+        dateInput,
+        sessionHint
+      ]),
+      el('label', { class: 'field' }, [
+        el('span', { class: 'field__label' }, '备考起点'),
+        startInput,
+        el('div', { class: 'dim-2', style: { fontSize: '0.75rem', marginTop: '0.25rem' } },
+          '首次设置时自动记为当天，用于首页算「已走过 x%」。留空则不显示百分比。')
+      ]),
       el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '数学科目'), setSelect]),
       el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '每日目标（分钟）'), goalInput])
     ]),
@@ -106,6 +138,12 @@ function examCard(ctx) {
       `当前按「${MATH_SCOPE[state.profile.subjectSet]?.name || '数学一'}」安排计划：${MATH_SCOPE[state.profile.subjectSet]?.note || ''}`)
   )
   return card.node
+}
+
+/** 初试日期下方的届数提示文案 */
+function sessionHintText(examDate) {
+  const exam = examSession(examDate)
+  return `按这个日期，站点会显示为「${exam.title}」（${exam.year} 年 12 月初试 → ${exam.year + 1} 年入学）`
 }
 
 /* ---------------- 外观 ---------------- */
@@ -561,6 +599,9 @@ async function accountPanel(ctx, user) {
           class: 'btn btn--sm btn--ghost',
           type: 'button',
           onClick: async () => {
+            // 先把话写好再退出：退出之后界面立刻被登录屏接管，
+            // 那时再弹 toast 会被渲染冲掉，或者和别的提示叠在一起。
+            setAuthNotice('已退出登录。本机的数据都还在，用原账号登录就能继续。')
             await signOut()
             toast('已退出登录，本地数据还在', { kind: 'info' })
             ctx.refresh()

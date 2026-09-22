@@ -9,8 +9,44 @@ import { payloadFromState, markLocalDirty, initCloudSync } from './cloud.js'
 export const STORAGE_KEY = 'kivotos-kaoyan-v1'
 export const DATA_VERSION = 1
 
-/** 28考研初试：2027 年 12 月 26 日（12 月第 4 个周末的周日，可在设置里改） */
+/**
+ * 默认初试日期：2027 年 12 月 26 日（12 月第 4 个周末的周日，可在设置里改）。
+ * 对应的届数由 examSession 从日期推导，不写死——改了日期，「28考研」会自己跟着变。
+ */
 export const DEFAULT_EXAM_DATE = '2027-12-26'
+
+/**
+ * 从初试日期推导「届数」和「年份」。
+ *
+ * 考研届数的惯例：**入学年份 = 初试所在年份 + 1**。
+ *   2027-12-26 初试 → 2028 年入学 → **28考研**
+ *   2026-12-26 初试 → 2027 年入学 → **27考研**
+ * 所以「28考研」这个标签不需要用户填，从日期算即可。
+ *
+ * @param {string|Date} examDate 初试日期（'YYYY-MM-DD' 或 Date）
+ * @returns {{ year:number, session:number, title:string, short:string, label:string }}
+ *   year    = 初试所在年份（AI 提示词要用它，别再取当前年份）
+ *   session = 届数（28）
+ *   title   = '28考研'
+ *   label   = '2028 年考研（28考研）'，需要更完整表述时用
+ */
+export function examSession(examDate = DEFAULT_EXAM_DATE) {
+  const d = examDate instanceof Date ? examDate : new Date(`${String(examDate).slice(0, 10)}T00:00:00`)
+  const year = Number.isNaN(d.getTime()) ? Number(DEFAULT_EXAM_DATE.slice(0, 4)) : d.getFullYear()
+  const session = (year + 1) % 100
+  return {
+    year,
+    session,
+    title: `${session}考研`,
+    short: `${session}`,
+    label: `${year + 1} 年考研（${session}考研）`
+  }
+}
+
+/** 当前设置的考试届数（如 '28考研'）。传参而不是读模块级 state，避免初始化顺序上的隐患。 */
+export function sessionTitleOf(examDate) {
+  return examSession(examDate).title
+}
 
 /**
  * 四大科目。
@@ -61,6 +97,9 @@ function defaultState() {
       targetSchool: '',
       targetMajor: '',
       examDate: DEFAULT_EXAM_DATE,
+      // 备考起点。首次设置时自动记为当天，首页「已走过 x%」用它和初试日期算真实进度。
+      // 之前是拿 days/460 硬算，日期一改就失真。
+      studyStartDate: '',
       subjectSet: 'math1', // math1 数一 / math2 数二 / math3 数三 / no-math 不考数学
       dailyGoalMin: 360
     },
@@ -673,7 +712,22 @@ export function checkIn() {
 
 export function updateProfile(patch) {
   Object.assign(state.profile, patch)
+  // 备考起点：第一次设置初试日期时记下当天，用于首页算「已走过 x%」。
+  // 老数据里可能没有这个字段，所以在这里补一次。
+  if (!state.profile.studyStartDate) {
+    state.profile.studyStartDate = toDateKey(new Date())
+  }
   commit('profile:update')
+}
+
+/**
+ * 单独设置备考起点（设置页用）。
+ * 传空字符串表示"还没开始"，会清掉。
+ */
+export function setStudyStartDate(dateKey) {
+  state.profile.studyStartDate = dateKey ? toDateKey(dateKey) : ''
+  commit('profile:studyStart')
+  return state.profile.studyStartDate
 }
 
 export function updateSettings(patch) {

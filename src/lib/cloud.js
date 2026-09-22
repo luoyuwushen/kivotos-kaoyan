@@ -486,9 +486,43 @@ export async function signInWithEmail(email, { redirectTo } = {}) {
 }
 
 /**
+ * 这个项目到底需不需要「邮箱确认」？
+ *
+ * 为什么要问一次而不是写死：项目设置是会变的。开着 Confirm email 时，
+ * 注册完必须先点邮件里的确认链接才能登录，界面上就得有「重发一封」；
+ * 关掉之后（本站现在就是关的）注册即登录，那个按钮留着只会让人以为
+ * 「我是不是还得去收封信」。
+ *
+ * 数据来源是 Supabase 自己的 /auth/v1/settings，里面 mailer_autoconfirm
+ * 为 true 就表示不需要确认。取不到（离线/被拦）时保守地返回 null，
+ * 调用方按「不确定」处理。
+ */
+let needsEmailConfirmCache = null
+
+export async function needsEmailConfirm() {
+  if (!isCloudConfigured()) return false
+  if (needsEmailConfirmCache !== null) return needsEmailConfirmCache
+  try {
+    const cfg = cloudConfig()
+    const res = await fetch(`${cfg.url}/auth/v1/settings`, {
+      headers: { apikey: cfg.anonKey },
+      signal: AbortSignal.timeout(15000)
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    if (typeof json?.mailer_autoconfirm !== 'boolean') return null
+    needsEmailConfirmCache = json.mailer_autoconfirm === false
+    return needsEmailConfirmCache
+  } catch {
+    return null
+  }
+}
+
+/**
  * 重发确认邮件。
  * 项目开着「Confirm email」时，注册完必须先点邮件里的确认链接才能用密码登录，
  * 而免费版发信额度很小，邮件丢了/没收到很常见 —— 所以界面上要能再要一封。
+ * 只在 needsEmailConfirm() 为真时才会被渲染出来。
  */
 export async function resendConfirmEmail(email, { redirectTo } = {}) {
   const sb = await getClient()

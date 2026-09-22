@@ -7,6 +7,9 @@
      1) 底部铺一层薄天空 + 斜射光柱 + 页脚云带 —— 让白底不再是一片死白
      2) 首页 Hero 升格为整页唯一的天空面板，倒计时用巨型纯白数字 + 压扁的光环
      3) 每类卡片有身份色竖条与三层叠边 —— 打破上一版的均质表格感
+
+   另外新增第 22 节：进入作战本部（登录屏）。它不在 .shell 里 ——
+   整页铺天，一块"事务局窗口"当入口。
    ========================================================================= */
 
 /* 数字字形：官方站的大数字走几何无衬线，Poppins 是最接近的免费替代。
@@ -55,6 +58,7 @@
   --accent-hover: #21bbff;
   --accent-sky: #54dcfe;
   --accent-sky-rgb: 84, 220, 254;
+  --accent-lite: #5ab0ee; /* 比 --accent 亮一档：浅底上的小图标 hover（登录屏的「看一眼」） */
   --on-accent: #fff; /* 实心强调色之上的文字：整站唯一允许的纯白 */
   --accent-ink: #0a3d6b;
   --glow: #a7d8ea; /* 官方站 CSS 里那个真实的"光晕冰蓝"，全站辉光都用它 */
@@ -2757,7 +2761,47 @@ canvas {
    右栏刻意做成"事务局窗口"：白纸、直角（--r-sm）、顶上一道斜杠饰带。
    整站的卡片都是 18px 圆角，这里不跟 —— 差别本身就是信息：
    它是一张递出来的表，不是应用里的一个模块。
+
+   舞台切换（.auth-host / .app 谁在台上）靠 <html data-stage>，
+   两屏始终是同级节点、谁也不删谁：登录屏曾经直接 mount 到 #app，
+   而 mount 会清空容器 —— 那一次把整个外壳连带删掉，mainNode 成了脱离文档的孤儿。
    ========================================================================== */
+
+.auth-host {
+  display: none;
+}
+
+:root[data-stage='auth'] .auth-host {
+  display: block;
+}
+
+/**
+ * 登录阶段**把主站的氛围层收掉**。
+ *
+ * .bg-layer 里那两块 bg-bloom 是 78vw 的白色天光，它自己是一个 fixed + z-index:0 的层，
+ * 和登录屏的天色同级；实测下来它会盖在天色上面，把整屏提亮一大截 ——
+ * 天顶本该是 #1d5c9e 的地方，屏幕上显示成 rgb(122,169,212)，
+ * 白字对比度从 6.6:1 掉到 2.5:1，全屏白字都读不清。
+ *
+ * 登录屏自带一套天色和光柱（见 views/login.js 的 authBackdrop），本来就不需要它。
+ */
+:root[data-stage='auth'] .bg-layer {
+  display: none;
+}
+
+/* 注意选择器要写成 `#app > .app`：外壳容器的类名就叫 .app，
+   和站点根容器 #app 同名。只写 .app 会连 <div id="app"> 一起隐掉 ——
+   结果是整页空白，而 DOM 检查看起来一切正常，非常难查。 */
+:root[data-stage='auth'] #app > .app {
+  display: none;
+}
+
+/* 主外壳自己抬高一层：这样即使登录屏还在文档里，也不会盖住应用 */
+.shell,
+.pagefoot {
+  position: relative;
+  z-index: 1;
+}
 
 .auth {
   position: relative;
@@ -2766,18 +2810,42 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  /* 竖向不裁：窗口很矮（笔记本分屏、横屏手机）时宁可让页面滚动，
+     也不能把输入框裁掉 —— 登录屏是唯一一条进门的路。 */
+  overflow-x: hidden;
+  /**
+   * 左栏文字贴片的底色。
+   *
+   * 比主站的 --chip-bg 更深、更实，原因：这块天区压着 bg-bloom--sun
+   * （78vw 的白色天光），实测把天色抬到 rgb(200,219,234) 那一档；
+   * 半透明的 .5 深蓝叠上去只剩 rgb(104,132,157)，白字只有 3.9:1，够不着 AA。
+   * 贴片加深到 .82 之后，无论天光多重，白字都在 10:1 以上。
+   *
+   * 写法按 DESIGN.md 的规矩：rgba() 只允许包 rgb 变量，所以深蓝单独出 token。
+   */
+  --auth-chip-rgb: 6, 34, 62;
+  --auth-chip: rgba(var(--auth-chip-rgb), 0.82);
 }
 
-/* 天色背景。和首页天空面板同一套色标 —— 白字要 4.5:1 就得压在 42% 以内 */
+/* 天色背景。和首页天空面板同一套色标 —— 白字要 4.5:1 就得压在 42% 以内。
+   但登录屏左栏的文字都自带深色贴片（.auth-brand / .auth-mission__foot / 倒计时标签），
+   所以这里不必死守 42%：渐变可以把"起亮"的位置推后一点，天色更好看，
+   唯一压在裸天色上的只剩那串巨型倒计时数字（大字，门槛 3:1），它落在 45–55% 一带。 */
 .auth__sky {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(85% 55% at 88% 100%, rgba(var(--surface-rgb), 0.7) 0%, transparent 62%),
-    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 34%, var(--sky-3) 58%, var(--sky-4) 82%, var(--bg) 100%);
+  background: radial-gradient(78% 42% at 86% 100%, rgba(var(--surface-rgb), 0.62) 0%, transparent 68%),
+    linear-gradient(
+      180deg,
+      var(--sky-1) 0%,
+      var(--sky-2) 40%,
+      var(--sky-3) 56%,
+      var(--sky-4) 78%,
+      var(--bg) 95%
+    );
 }
 
 .auth__inner {
@@ -2789,7 +2857,9 @@ canvas {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, 408px);
   gap: clamp(1.5rem, 5vw, 3.5rem);
-  align-items: center;
+  /* align-content 而不是 align-items：网格行只占内容高度，剩下的空白要靠它来居中。
+     只写 align-items 的话，两列各自被拉伸到整行高，内容仍然贴着顶部。 */
+  align-content: center;
 }
 
 .auth--bare .auth__inner,
@@ -2801,10 +2871,21 @@ canvas {
 
 /* ---------------- 左栏：这场作战本身 ---------------- */
 
+/**
+ * 左栏整体的兜底底色。
+ *
+ * 为什么不是"把天色调深一点"就完了：登录屏的天色上面还压着光柱、网格纹理和云带，
+ * 实测下来这些氛围层会把天色抬亮一大截（天顶本该 #1d5c9e 的位置，屏幕上量到
+ * rgb(95,151,203)），白字对比度从 6.6:1 掉到 2.2:1 —— 整栏小字都读不清。
+ *
+ * 与其和一堆半透明层较劲，不如给文字一个**确定的底**：
+ * 一块极淡的深色贴片（DESIGN.md 里 chip-bg 的同一套写法），字压在上面，
+ * 对比度就是算得出来的，不受氛围层影响。
+ */
 .auth-mission {
   display: flex;
   flex-direction: column;
-  gap: clamp(1.75rem, 5vh, 3rem);
+  gap: clamp(2rem, 6vh, 3.5rem);
   color: var(--on-accent);
   min-width: 0;
 }
@@ -2812,37 +2893,43 @@ canvas {
 .auth-brand {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.875rem;
+  align-self: flex-start;
+  padding: 0.6rem 1rem 0.6rem 0.75rem;
+  border-radius: var(--r-md);
+  background: var(--auth-chip);
 }
 
 .auth-brand__title {
   font-family: var(--font-display);
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   font-weight: 800;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .auth-brand__sub {
+  margin-top: 0.15rem;
   font-size: 0.8125rem;
   font-weight: 700;
-  color: rgba(var(--surface-rgb), 0.78);
+  /* 不用半透明白：贴片本身是半透明深蓝，再叠一层半透明白字，
+     实际对比度会随天色浮动（实测掉到 3.9:1）。小字一律走纯白，稳过 AA。 */
+  color: var(--on-accent);
 }
 
 /* 倒计时：小型深色贴片 —— 面板内所有 13–14px 小字都这么处理（DESIGN.md 第 2 节） */
 .auth-mission__count {
   position: relative;
   isolation: isolate;
-  margin-top: clamp(1.5rem, 6vh, 3rem);
 }
 
 .auth-mission__label {
   position: relative;
   z-index: 1;
   display: inline-block;
-  margin-bottom: 0.5rem;
-  padding: 0.2rem 0.7rem;
+  margin-bottom: 0.75rem;
+  padding: 0.22rem 0.75rem;
   border-radius: 999px;
-  background: var(--chip-bg);
+  background: var(--auth-chip);
   font-size: 0.8125rem;
   font-weight: 700;
 }
@@ -2852,65 +2939,98 @@ canvas {
   z-index: 1;
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.6rem;
   font-family: var(--font-num);
-  font-size: clamp(3.5rem, 7.5vw, 6rem);
+  font-size: clamp(4.5rem, 10vw, 7.5rem);
   font-weight: 800;
-  line-height: 0.9;
-  letter-spacing: -0.035em;
-  text-shadow: 0 6px 22px rgba(var(--accent-ink-rgb), 0.35);
+  line-height: 0.86;
+  letter-spacing: -0.04em;
+  text-shadow: 0 6px 22px rgba(var(--accent-ink-rgb), 0.4);
 }
 
 .auth-mission__num .countdown__unit {
-  font-size: clamp(1.125rem, 2.2vw, 1.75rem);
+  font-size: clamp(1.25rem, 2.6vw, 2rem);
   font-weight: 700;
   letter-spacing: 0;
 }
 
 .auth-mission__foot {
   min-width: 0;
+  align-self: flex-start;
+  width: min(100%, 30rem);
+  padding: 0.7rem 0.9rem 0.8rem;
+  border-radius: var(--r-md);
+  background: var(--auth-chip);
 }
 
 .auth-mission__meta {
   margin-bottom: 0.5rem;
   font-size: 0.875rem;
   font-weight: 700;
-  color: rgba(var(--surface-rgb), 0.86);
+  color: var(--on-accent);
 }
 
 .auth-mission__halo {
   opacity: 0.5;
 }
 
-/* 阶段长条：走过的部分填实，剩下的是四个阶段各自的颜色 */
-.auth-phases__track {
-  position: relative;
-  display: flex;
-  height: 10px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: rgba(var(--accent-ink-rgb), 0.4);
-  box-shadow: inset 0 1px 0 rgba(var(--surface-rgb), 0.25);
+/* 阶段长条：四段按比例分宽，走过的那段压深，当前位置一根竖线。
+   这不是进度条，是时间轴 —— 所以用竖线标"现在"，而不是让填充自己说话。 */
+.auth-phases {
+  min-width: 0;
 }
 
-.auth-phases__track > .auth-phases {
+.auth-phases__bar {
+  position: relative;
   display: flex;
-  flex: 1;
-  min-width: 0;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(var(--accent-ink-rgb), 0.38);
 }
 
 .auth-phases__seg {
   display: block;
   height: 100%;
-  border-radius: 0;
 }
 
+/* 走过的部分：压一层深色，而不是给每段调透明度 —— 后者会让四种阶段色互相打架 */
 .auth-phases__fill {
   position: absolute;
   inset: 0 auto 0 0;
+  background: rgba(var(--accent-ink-rgb), 0.62);
+  border-right: 2px solid rgba(var(--surface-rgb), 0.92);
+}
+
+.auth-phases__now {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-sky), rgba(var(--surface-rgb), 0.92));
-  box-shadow: 0 0 14px rgba(84, 220, 254, 0.55);
+  background: var(--on-accent);
+  box-shadow: 0 0 8px rgba(var(--surface-rgb), 0.8);
+}
+
+.auth-phases__legend {
+  display: flex;
+  margin-top: 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--on-accent);
+}
+
+.auth-phases__legend > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-phases__legend > span + span {
+  padding-left: 0.4rem;
+  border-left: 1px solid rgba(var(--surface-rgb), 0.34);
 }
 
 /* ---------------- 右栏：事务局窗口 ---------------- */
@@ -3004,7 +3124,7 @@ canvas {
 }
 
 .auth-field__peek:hover {
-  color: var(--accent-deep);
+  color: var(--accent-lite);
   background: var(--accent-soft);
 }
 
@@ -3047,6 +3167,12 @@ canvas {
   margin-top: 0.125rem;
 }
 
+/* 密码可见性开关：睁眼 / 闭眼两个图标都在 DOM 里，靠这个类切显隐。
+   不用 [hidden]：那在 <svg> 上不生效（原因见 views/login.js 里的注释）。 */
+.icon.is-hidden {
+  display: none;
+}
+
 /* 表单下面那几条次级路径：登录链接、重发确认信、忘记密码 */
 .auth-links {
   display: flex;
@@ -3071,6 +3197,17 @@ canvas {
   transition: color 0.18s ease, text-decoration-color 0.18s ease;
 }
 
+/*
+ * 深色主题下链接要换色。
+ * --accent-deep 是"压深"过的蓝，在浅色面板上是 4.5:1 以上；但深色面板本身已经很暗，
+ * 再压深的蓝就只剩 2:1 出头 —— 小字根本读不出来（实际截图里就是这样）。
+ * 这里改成提亮：#5AB0EE 落在 #17293C 上有 6:1 左右，同时仍是同一个蓝色家族。
+ */
+:root[data-theme='dark'] .auth-link {
+  color: #5ab0ee;
+  text-decoration-color: rgba(90, 176, 238, 0.5);
+}
+
 .auth-link:hover {
   color: var(--accent-hover);
   text-decoration-color: currentColor;
@@ -3081,12 +3218,25 @@ canvas {
   cursor: not-allowed;
 }
 
+/* 次级路径块：两条不常走的入口收在一个有上边框的小块里，别和主流程抢注意力 */
 .auth-alt {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding-top: 1rem;
+  padding-top: 0.875rem;
   border-top: 2px solid var(--border);
+}
+
+.auth-alt__lead {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  /* 用 --text-secondary 而不是 tertiary：#7c9cbb 那一档在浅色面板上只有 4.31:1，
+     够不着 AA（13px 小字要 4.5:1）。这是 DESIGN.md 里已经记过一笔的老问题。 */
+  color: var(--text-secondary);
+}
+
+.auth-alt__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin-top: 0.2rem;
 }
 
 .auth-hint {
@@ -3105,6 +3255,17 @@ canvas {
   font-size: 0.8125rem;
   font-weight: 700;
   line-height: 1.7;
+}
+
+/* 深色下同样是"提亮"：--accent-soft 在深色主题里本身就是深蓝，
+   上面再压 --accent-deep 只有 2:1 上下，等于没写 */
+:root[data-theme='dark'] .auth-note {
+  border-color: rgba(90, 176, 238, 0.45);
+  color: #8fd0f8;
+}
+
+:root[data-theme='dark'] .auth-field__peek:hover {
+  color: #8fd0f8;
 }
 
 /* 等待屏 ------------------------------------------------ */
@@ -3128,7 +3289,8 @@ canvas {
 /* 响应式 ------------------------------------------------ */
 
 /* 平板：天色压成顶部一条，面板落到它下面。
-   到了这个宽度，左栏的倒计时已经挤不出气势，不如把它留在天上当氛围。 */
+   到了这个宽度，左栏的倒计时已经挤不出气势，不如把它留在天上当氛围。
+   注意天色换成了另一套色标：这时面板从 60% 处开始，白色小字只要待在 52% 以内就安全。 */
 @media (max-width: 900px) {
   .auth {
     align-items: flex-start;
@@ -3148,10 +3310,6 @@ canvas {
     padding-top: 0.5rem;
   }
 
-  .auth-mission__count {
-    margin-top: 1rem;
-  }
-
   .auth-mission__num {
     font-size: clamp(3.25rem, 15vw, 4.5rem);
   }
@@ -3161,10 +3319,10 @@ canvas {
     background: linear-gradient(
       180deg,
       var(--sky-1) 0%,
-      var(--sky-2) 22%,
-      var(--sky-3) 38%,
-      var(--sky-4) 54%,
-      var(--bg) 66%
+      var(--sky-2) 20%,
+      var(--sky-3) 34%,
+      var(--sky-4) 50%,
+      var(--bg) 64%
     );
   }
 
@@ -3183,12 +3341,35 @@ canvas {
     padding: 1.125rem 1rem 1.25rem;
   }
 
-  .auth-links {
+  .auth-links,
+  .auth-alt__row {
     gap: 0.3rem 1rem;
   }
 
+  /* 手机上天色只够盖住品牌和倒计时，阶段长条落到浅底上会读不清，直接收掉 */
   .auth-mission__foot {
     display: none;
+  }
+}
+
+/* 矮窗口（笔记本分屏 / 横屏手机）：居中会顶到裁切边缘，改成从顶部排下来并允许滚动 */
+@media (max-height: 760px) and (min-width: 901px) {
+  .auth {
+    align-items: flex-start;
+  }
+
+  .auth__inner {
+    align-content: start;
+    padding-top: clamp(1.5rem, 5vh, 3rem);
+    padding-bottom: clamp(1.5rem, 5vh, 3rem);
+  }
+
+  .auth-mission {
+    gap: clamp(1.25rem, 3.5vh, 2rem);
+  }
+
+  .auth-mission__num {
+    font-size: clamp(3.5rem, 8vw, 5.5rem);
   }
 }
 

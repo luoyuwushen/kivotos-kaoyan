@@ -6,8 +6,9 @@
  */
 
 import { chromium } from 'playwright'
+import { installFakeBackend, META_KEY } from './lib/test-session.mjs'
 
-const BASE = 'http://127.0.0.1:4173/'
+const BASE = process.env.SMOKE_URL || 'http://127.0.0.1:4173/'
 const KEY = 'kivotos-kaoyan-v1'
 
 const results = []
@@ -27,12 +28,29 @@ page.on('console', (m) => {
 })
 await page.route('**://fonts.googleapis.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/css', body: '' }))
 await page.route('**://fonts.gstatic.com/**', (r) => r.abort())
+// 站点配了后端之后，没登录会被登录屏挡在门外 —— 这个脚本只管点页面，
+// 所以先给它一份有效会话（细节见 scripts/lib/test-session.mjs）
+await installFakeBackend(page)
 
-/* 干净的初始状态：不清 localStorage，测试真实首次使用流程 */
+/* 干净的初始状态：本地数据清掉，走真实的首次使用流程 */
 await page.goto(BASE, { waitUntil: 'domcontentloaded' })
-await page.evaluate((k) => localStorage.removeItem(k), KEY)
+await page.evaluate(([k, m]) => {
+  localStorage.removeItem(k)
+  localStorage.removeItem(m)
+}, [KEY, META_KEY])
 await page.reload({ waitUntil: 'domcontentloaded' })
-await page.waitForTimeout(1200)
+/**
+ * 等欢迎引导自己弹出来，别用固定 sleep。
+ *
+ * 配了后端之后，首屏要先读一次会话才决定"进应用还是给登录屏"，
+ * 引导弹窗要等那一步落地才会排上 —— 固定 1.2 秒有时候刚好卡在它前面，
+ * 于是报「首次打开没有引导」，看着像功能坏了。
+ */
+await page
+  .locator('.modal-backdrop')
+  .first()
+  .waitFor({ state: 'visible', timeout: 8000 })
+  .catch(() => {})
 
 /* ---------- 1. 首次引导 ---------- */
 check('首次打开出现欢迎引导', (await page.locator('.modal-backdrop').count()) === 1)

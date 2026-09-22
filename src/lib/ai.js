@@ -11,8 +11,7 @@
  *   - 接口必须允许浏览器跨域调用（CORS）。多数 OpenAI 兼容网关都允许。
  */
 
-import { state } from './store.js'
-import { SUBJECTS } from './store.js'
+import { state, SUBJECTS, examSession } from './store.js'
 
 export function aiConfig() {
   return state.settings.aiApi || { baseUrl: '', apiKey: '', model: '', enabled: false }
@@ -36,15 +35,20 @@ export function buildPlanPrompt({ subject, book, chapters, startDate, examDate, 
   const subjectName = SUBJECTS.find((s) => s.id === subject)?.name || subject
   const list = chapters.map((c, i) => `${i + 1}. ${c.title}（估 ${c.hours} 小时）`).join('\n')
   const profile = state.profile
+  // 届数与年份都从初试日期推导。
+  // 之前这里写的是 new Date().getFullYear()，于是始终是"今年 12 月"，
+  // 而实际初试在 2027-12-26 —— 模型会按错误的紧迫度做规划。改为从 examDate 取值。
+  const exam = examSession(examDate || profile.examDate)
   return [
-    `你是一位考研规划老师。请为一位 ${new Date().getFullYear()} 年 12 月参加考研的学生，`,
+    `你是一位考研规划老师。请为一位参加 ${exam.year} 年 12 月考研（${exam.title}）的学生，`,
     `把下面这本教材的目录排进日程。`,
     ``,
     `【学生情况】`,
     `- 科目：${subjectName}`,
+    `- 考试届数：${exam.title}（${exam.year} 年 12 月初试）`,
     `- 目标院校/专业：${profile.targetSchool || '未填写'} ${profile.targetMajor || ''}`.trim(),
     `- 计划起始日：${startDate}`,
-    `- 初试日期：${examDate}（还剩 ${daysLeft} 天）`,
+    `- 初试日期：${examDate || profile.examDate}（还剩 ${daysLeft} 天）`,
     `- 每天可投入时长：约 ${Math.round((profile.dailyGoalMin || 360) / 60)} 小时（含其他科目）`,
     ``,
     `【教材目录】`,

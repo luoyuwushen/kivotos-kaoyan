@@ -19,7 +19,7 @@
 
 import { chromium } from 'playwright'
 import { createHmac } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 const BASE = process.env.CLOUD_TEST_BASE || 'http://127.0.0.1:4173/'
 const STORAGE_KEY = 'kivotos-kaoyan-v1'
@@ -51,8 +51,40 @@ function readEnvFileQuiet(file) {
   }
 }
 const localEnv = { ...readEnvFileQuiet('.env'), ...readEnvFileQuiet('.env.local') }
-const BAKED_URL = String(process.env.VITE_SUPABASE_URL || localEnv.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
-const BAKED_ANON = String(process.env.VITE_SUPABASE_ANON_KEY || localEnv.VITE_SUPABASE_ANON_KEY || '')
+
+/**
+ * 产物里到底指向哪个 Supabase 项目？
+ *
+ * 这件事**不能**只看 .env / .env.local：构建时如果进程环境变量里给了
+ * VITE_SUPABASE_URL（很常见，例如为了跑测试而换一个假项目），它优先于 .env 文件，
+ * 于是产物里的地址和这里读到的会是两个不同的项目 —— 结果是假服务器拦不住任何请求，
+ * 测试会真的打到线上项目上去。所以直接去 dist 里把地址抠出来，以产物为准。
+ */
+function detectBakedUrl() {
+  try {
+    const dir = new URL('../dist/assets/', import.meta.url)
+    // 必须扫**所有** chunk：配置有可能被拆进共享 chunk，
+    // 只看入口那个 index-*.js 会找不到，然后脚本回退到 .env.local 的地址 ——
+    // 于是假服务器拦不住任何请求，测试会真的打到线上项目（实测踩过）。
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+      const code = readFileSync(new URL(file, dir), 'utf8')
+      // 构建时 import.meta.env.VITE_SUPABASE_URL 会被替换成字面量
+      const m = /https:\/\/[a-z0-9-]+\.supabase\.(?:co|in)/.exec(code)
+      if (m) return m[0]
+    }
+    return ''
+  } catch {
+    return ''
+  }
+}
+
+const DIST_URL = detectBakedUrl()
+const BAKED_URL = String(
+  DIST_URL || process.env.VITE_SUPABASE_URL || localEnv.VITE_SUPABASE_URL || ''
+).replace(/\/+$/, '')
+const BAKED_ANON = String(
+  process.env.VITE_SUPABASE_ANON_KEY || localEnv.VITE_SUPABASE_ANON_KEY || ''
+)
 const HAS_BAKED = Boolean(BAKED_URL && BAKED_ANON)
 
 const FAKE_URL = HAS_BAKED ? BAKED_URL : 'https://testprojectref.supabase.co'
@@ -341,19 +373,24 @@ const readMeta = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(
    （本机跑过 npm run supabase:setup 或带 .env.local 构建时就会。）
    是的话，第 1 节「未配置」的场景就不适用了 —— 跳过并说明，
    否则会误报失败，让人以为代码坏了，其实是环境不同。
+
+   还有一个连带影响：配了后端的构建会**要求登录**（登录屏接管首屏），
+   而没配后端的构建仍然是纯本地版、直接进应用。两种构建的断言不一样，
+   所以这个探针同时决定了后面几节要不要跳过。
    ------------------------------------------------------------------ */
-const bakedProbe = await newPage({ seedState: seededState() })
+const bakedProbe = await newPage({ seedState: seededState(), config: { url: FAKE_URL, anonKey: ANON_KEY } })
 await bakedProbe.page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
-await bakedProbe.page.waitForTimeout(1000)
+await bakedProbe.page.waitForTimeout(1400)
+const bakedCfg = await bakedProbe.page.evaluate(() =>
+  localStorage.getItem('kivotos-kaoyan-cloud-cfg-v1'))
 const HAS_BAKED_CONFIG =
-  (await bakedProbe.page.locator('[data-testid="cloud-login"]').count()) === 1 &&
-  (await bakedProbe.page.locator('[data-testid="cloud-config-form"]').count()) === 0
+  (await bakedProbe.page.locator('.auth-desk:visible').count()) === 1 || Boolean(bakedCfg)
 await bakedProbe.context.close()
 
 if (HAS_BAKED_CONFIG) {
   console.log(`\n[i] 这次构建已把 Supabase 配置烘焙进产物（${FAKE_URL}）。`)
-  console.log('    · 「未配置」相关断言不适用 → 跳过第 1 节')
-  console.log('    · 其余断言照跑，网络仍由本脚本的假服务器接管，不会真连你的项目')
+  console.log('    · 构建期 env 优先于 localStorage，所以浏览器里塞的配置改不动它')
+  console.log('    · 未登录时登录屏会接管首屏 → 「未配置」那节不适用，其余照跑')
 }
 
 /* ==================================================================
@@ -402,45 +439,37 @@ if (!HAS_BAKED_CONFIG) {
 }
 
 /* ==================================================================
-   2. 配置已保存、但没有登录 → 给出登录表单
+   2. 已配置、但没有登录 → 登录屏接管首屏
+
+   这一节原来断言的是「设置页里那套登录表单」。现在登录是**独立的一屏**
+   （views/login.js，有忘记密码、显示密码、行内校验），所以断言改成打在登录屏上，
+   并额外验证一件事：没登录的人**进不去应用**，配置页自然也就到不了。
    ================================================================== */
 
-console.log('\n=== 2. 已配置未登录：走登录流程 ===')
+console.log('\n=== 2. 已配置未登录：登录屏接管 ===')
 {
   const { context, page } = await newPage({
     seedState: seededState(),
     config: { url: FAKE_URL, anonKey: ANON_KEY }
   })
   await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(900)
+  await page.waitForTimeout(1200)
 
-  check('已配置时显示项目 URL', (await page.locator('.mono').first().textContent()).includes(FAKE_URL))
-  check('给出登录表单', (await page.locator('[data-testid="cloud-login"]').count()) === 1)
-  check('登录状态显示为未登录', (await page.locator('.cloud-status').first().textContent()).includes('未登录'))
-
-  // 导航里的云端入口：配了后端才出现，并且能点进设置
-  const navCloud = page.locator('[data-testid="nav-cloud"]')
-  check('已配置但未登录时，导航里出现云端入口', (await navCloud.count()) === 1)
-  const navCloudText = (await navCloud.textContent()) || ''
-  check('导航入口显示未登录云端', navCloudText.includes('未登录'), navCloudText.trim())
-  check('导航入口带状态色（data-state）', (await navCloud.getAttribute('data-state')) === 'off',
-    String(await navCloud.getAttribute('data-state')))
-  await page.goto(`${BASE}#home`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(800)
-  await page.locator('[data-testid="nav-cloud"]').click()
-  await page.waitForTimeout(700)
-  check('点导航入口直达设置页', page.url().endsWith('#settings'), page.url())
-  await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(600)
+  check('未登录时被挡在登录屏，进不去设置页', page.url().endsWith('#login'), page.url())
+  check('给出登录表单', (await page.locator('[data-testid="auth-login-form"]').count()) === 1)
+  check('登录屏带倒计时左栏', (await page.locator('.auth-mission__num').count()) === 1)
+  // 主外壳是挂着的（hashchange 监听和数据订阅要它），但在登录阶段必须看不见
+  check('未登录时主外壳不可见', (await page.locator('.sidenav:visible').count()) === 0)
+  check('未登录时设置页不可达', (await page.locator('.cloud-status').count()) === 0)
 
   // 魔法链接
   const otpRequests = []
   page.on('request', (r) => {
     if (r.url().includes('/auth/v1/otp')) otpRequests.push(r)
   })
-  await page.locator('[data-testid="cloud-email"]').fill('newbie@example.com')
-  await page.locator('[data-testid="cloud-magic-link"]').click()
-  await page.waitForTimeout(800)
+  await page.locator('[data-testid="auth-email"]').fill('newbie@example.com')
+  await page.locator('[data-testid="auth-magic-link"]').click()
+  await page.waitForTimeout(900)
   check('点「发登录链接」会真的调用 Supabase OTP 接口', otpRequests.length === 1,
     otpRequests.length ? `POST ${new URL(otpRequests[0].url()).pathname}` : '没有发出请求')
   check('发送后有明确提示', (await page.locator('.toast').count()) >= 1)
@@ -452,9 +481,9 @@ console.log('\n=== 2. 已配置未登录：走登录流程 ===')
        ② 免费版每小时只发极少量邮件，超了就是 429，界面得把话说清楚。 */
   audit.otpAttempts.length = 0
   audit.otpMode = 'disabled'
-  await page.locator('[data-testid="cloud-email"]').fill('newbie@example.com')
-  await page.locator('[data-testid="cloud-magic-link"]').click()
-  await page.waitForTimeout(1200)
+  await page.locator('[data-testid="auth-email"]').fill('newbie@example.com')
+  await page.locator('[data-testid="auth-magic-link"]').click()
+  await page.waitForTimeout(1400)
   const disabledToast = (await page.locator('.toast').last().textContent().catch(() => '')) || ''
   check('项目禁用 OTP 注册时会自动退一步重试（不建用户）',
     audit.otpAttempts.join(',') === 'create=true,create=false',
@@ -463,9 +492,9 @@ console.log('\n=== 2. 已配置未登录：走登录流程 ===')
 
   audit.otpAttempts.length = 0
   audit.otpMode = 'ratelimit'
-  await page.locator('[data-testid="cloud-email"]').fill('newbie@example.com')
-  await page.locator('[data-testid="cloud-magic-link"]').click()
-  await page.waitForTimeout(1200)
+  await page.locator('[data-testid="auth-email"]').fill('newbie@example.com')
+  await page.locator('[data-testid="auth-magic-link"]').click()
+  await page.waitForTimeout(1400)
   const rateToast = (await page.locator('.toast').last().textContent().catch(() => '')) || ''
   check('发信额度用尽时给出可操作的中文提示',
     rateToast.includes('频繁') || rateToast.includes('等一会儿'),
@@ -473,29 +502,35 @@ console.log('\n=== 2. 已配置未登录：走登录流程 ===')
   audit.otpMode = 'ok'
   audit.otpAttempts.length = 0
 
-  // 密码登录：错的密码要被翻译成人话
-  await page.locator('[data-testid="cloud-email"]').fill(NEW_USER.email)
-  await page.locator('[data-testid="cloud-password"]').fill('wrong-password')
-  await page.locator('[data-testid="cloud-password-login"]').click()
-  await page.waitForTimeout(900)
-  check('密码错误提示已中文化',
-    (await page.locator('.toast').last().textContent().catch(() => '')).includes('邮箱或密码不对'))
+  // 密码登录：错的密码要被翻译成人话，并且落在字段/表单提示上
+  await page.locator('[data-testid="auth-email"]').fill(NEW_USER.email)
+  await page.locator('[data-testid="auth-password"]').fill('wrong-password')
+  await page.locator('[data-testid="auth-login-form-submit"]').click()
+  await page.waitForTimeout(1200)
+  const wrongHint = (await page.locator('.auth-feedback').textContent().catch(() => '')) || ''
+  check('密码错误提示已中文化', wrongHint.includes('邮箱或密码不对'), wrongHint.trim() || '（没有提示）')
 
   /**
    * 正确密码登录。
+   *
    * 这里刻意**不**要求弹「首次同步用哪边」：本机有数据、云端是空的，
    * 答案唯一，应用应该自己判断并直接上传，而不是拿一个只有一个合理答案的问题打扰用户。
    * （弹窗只留给真正有分歧的情况：两边都有数据。）
+   *
+   * 另外要验证登录之后**真的进了应用**：登录屏曾经因为 mount 到 #app
+   * 把整个外壳清掉，导致 mainNode 成了脱离文档的孤儿 —— 界面明明画对了却看不见。
+   * 所以这里断言可见的 .sidenav，而不是 .auth-desk 的计数。
    */
   const pushCountBefore = audit.upserts.length
-  await page.locator('[data-testid="cloud-email"]').fill(NEW_USER.email)
-  await page.locator('[data-testid="cloud-password"]').fill('right-password')
-  await page.locator('[data-testid="cloud-password-login"]').click()
-  await page.waitForTimeout(2500)
+  await page.locator('[data-testid="auth-email"]').fill(NEW_USER.email)
+  await page.locator('[data-testid="auth-password"]').fill('right-password')
+  await page.locator('[data-testid="auth-login-form-submit"]').click()
+  await page.waitForTimeout(3200)
   check('登录后自己判断并上传（云端为空，不必问用户）',
     audit.upserts.length > pushCountBefore,
     `写云端请求 ${audit.upserts.length - pushCountBefore} 次，弹窗数 ${await page.locator('.modal-backdrop').count()}`)
-  check('登录后账号面板出现', (await page.locator('[data-testid="cloud-account"]').count()) === 1)
+  check('登录后进入主应用', (await page.locator('.sidenav:visible').count()) === 1)
+  check('登录屏已让开', (await page.locator('.auth-desk:visible').count()) === 0)
   await context.close()
 }
 
@@ -765,29 +800,34 @@ console.log('\n=== 8. 退出登录与删除云端数据 ===')
   await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1400)
   await page.locator('button:has-text("退出登录")').click()
-  await page.waitForTimeout(1200)
-  check('退出后回到登录表单', (await page.locator('[data-testid="cloud-login"]').count()) === 1)
+  await page.waitForTimeout(1600)
+
+  /*
+   * 退出之后**整个应用被登录屏接管**，不再是「设置页里换一套表单」。
+   * 所以这里除了断言登录表单出现，还要断言主外壳确实让开了 ——
+   * 否则用户还能在已退出的界面上点来点去。
+   */
+  check('退出后回到登录屏', (await page.locator('[data-testid="auth-login-form"]').count()) === 1)
+  check('退出后主外壳让开', (await page.locator('.sidenav:visible').count()) === 0)
   const localAfterLogout = await readStore(page)
   check('退出登录不会动本地数据', localAfterLogout.quests.length > 0)
 
   // 重新登录后删云端
-  await page.locator('[data-testid="cloud-email"]').fill(USER_A.email)
-  await page.locator('[data-testid="cloud-password"]').fill('right-password')
-  await page.locator('[data-testid="cloud-password-login"]').click()
-  await page.waitForTimeout(1800)
+  await page.locator('[data-testid="auth-email"]').fill(USER_A.email)
+  await page.locator('[data-testid="auth-password"]').fill('right-password')
+  await page.locator('[data-testid="auth-login-form-submit"]').click()
+  await page.waitForTimeout(3000)
 
-  // 退出登录会把本地同步记录清掉，所以重新登录会再问一次首次同步方向，先关掉它
-  await page
-    .locator('.modal-backdrop')
-    .first()
-    .waitFor({ state: 'visible', timeout: 6000 })
-    .catch(() => {})
+  // 注意：退出登录会把本地同步记录清掉，所以重新登录会走一次首次对账
+  check('重新登录后回到应用', (await page.locator('.sidenav:visible').count()) === 1)
   for (let i = 0; i < 3 && (await page.locator('.modal-backdrop').count()) > 0; i++) {
     await page.keyboard.press('Escape')
     await page.waitForTimeout(400)
   }
   check('重新登录后弹窗可关闭、能继续操作', (await page.locator('.modal-backdrop').count()) === 0)
 
+  await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1400)
   await page.locator('button:has-text("删除云端数据")').click()
   await page.locator('.modal-backdrop').waitFor({ state: 'visible', timeout: 8000 })
   check('删除云端前会二次确认', (await page.locator('.modal__title').textContent()).includes('删除云端'))
@@ -847,16 +887,26 @@ console.log('\n=== 10. 云端状态徽标对比度（WCAG AA）===')
     return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
   }
   const parse = (css) => (css.match(/[\d.]+/g) || []).slice(0, 3).map(Number)
+  /**
+   * WCAG 对比度 = (亮者 + 0.05) / (暗者 + 0.05)。
+   * 注意别写反：反过来会把"深字白底"算成 0.09:1，看着像全线不达标 ——
+   * 这个脚本原来就是反的，所以它的三条断言其实一直在用错误的值做判断。
+   */
   const contrast = (fg, bg) => {
-    const [a, b] = [luminance(fg), luminance(bg)].sort((x, y) => y - x)
-    return (a + 0.05) / (b + 0.05)
+    const [dark, light] = [luminance(fg), luminance(bg)].sort((x, y) => x - y)
+    return (light + 0.05) / (dark + 0.05)
   }
 
   /** 把某种状态下的徽标渲染出来，量文字色 / 底色 */
   const measure = async (state, colors) => {
-    const { context, page } = await newPage({ seedState: seededState() })
+    // 带会话：现在没登录的人会被登录屏挡住，根本进不去设置页，也就看不到这个徽标
+    const { context, page } = await newPage({
+      seedState: seededState(),
+      meta: { userId: USER_A.id, email: USER_A.email, initialized: true, lastSyncedAt: new Date().toISOString(), lastSyncedBy: 'push' },
+      session: sessionFor(USER_A)
+    })
     await page.goto(`${BASE}#settings`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(700)
+    await page.waitForTimeout(1400)
     const styles = await page.evaluate(
       ({ st, cs }) => {
         const status = document.querySelector('[data-testid="cloud-status"]')

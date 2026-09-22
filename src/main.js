@@ -15,9 +15,18 @@ import {
   rolloverOverdue,
   generatePhases,
   updateProfile,
-  connectCloud
+  connectCloud,
+  sessionTitleOf
 } from './lib/store.js'
-import { cloudMeta, currentUser, runSync, isCloudConfigured, isStateEmpty, forcePull } from './lib/cloud.js'
+import {
+  cloudMeta,
+  currentUser,
+  runSync,
+  isCloudConfigured,
+  isStateEmpty,
+  forcePull,
+  watchSession
+} from './lib/cloud.js'
 import { icon, brandMark } from './components/icons.js'
 import { toast, enableSpotlight, observeReveals, openModal, REDUCED } from './components/ui.js'
 import { appFooter } from './components/footer.js'
@@ -32,7 +41,8 @@ import { renderMistakes } from './views/mistakes.js'
 import { renderGoals } from './views/goals.js'
 import { renderMedals } from './views/medals.js'
 import { renderSettings, applyTheme } from './views/settings.js'
-import { renderLogin, renderAuthLoading, renderAuthNoBackend, setAuthEnteredHandler, AUTH_ROUTES } from './views/login.js'
+import { renderLogin, renderAuthLoading, renderAuthNoBackend, setAuthEnteredHandler, AUTH_ROUTES, DEV_ROUTES } from './views/login.js'
+import { renderSceneProbe } from './views/scene-probe.js'
 
 /* ---------------- 导航定义 ---------------- */
 
@@ -55,7 +65,27 @@ let rerenderScheduled = false
 /** 已经进入作战本部（登录通过 / 本来就不需要登录） */
 let insideApp = false
 
+/**
+ * 还在等登录：界面被登录屏占着。
+ * 和 insideApp 分开，是因为外壳会先装好（见 render() 里的注释）——
+ * 「外壳在」和「放人进来了」是两件事。
+ */
+let awaitingAuth = false
+
+/**
+ * 正在读会话（启动后那一小段）。
+ *
+ * 为什么单独一个状态：读会话之前**不能**先画登录表单。
+ * 登录屏的 render 会把「没登录却想进 #settings」这类地址拨回 #login，
+ * 于是在「其实有会话」的情况下，地址栏会先被改成 #login，等会话读回来再进应用 ——
+ * 用户看到的是「先被踢去登录页、又自己进去了」，而且他原来要去的页面已经丢了。
+ * 所以这一段只画 wait 屏，不碰地址栏。
+ */
+let checkingSession = false
+
 const AUTH_HASHES = new Set(AUTH_ROUTES)
+/** 开发用探针路由（`#scene`）：移植阶段用来读骨架结构、看渲染效果 */
+const DEV_HASHES = new Set(DEV_ROUTES)
 
 /* ---------------- 渲染上下文 ---------------- */
 
@@ -129,7 +159,8 @@ function buildShell() {
   const sidenav = el('nav', { class: 'sidenav', 'aria-label': '主导航' })
 
   const brandTitle = el('div', { class: 'brand__title' }, state.profile.siteName || '基沃托斯作战本部')
-  const brandSub = el('div', { class: 'brand__sub' }, `28考研 · ${state.profile.nickname || 'Sensei'}`)
+  // 届数从初试日期推导（2027-12-26 → 28考研），不写死，改日期会自动跟着变
+  const brandSub = el('div', { class: 'brand__sub' }, `${sessionTitleOf(state.profile.examDate)} · ${state.profile.nickname || 'Sensei'}`)
 
   sidenav.append(
     el('div', { class: 'brand' }, [
@@ -169,20 +200,37 @@ function buildShell() {
   const shell = el('div', { class: 'shell' }, [sidenav, main])
   const shellWrap = el('div', { class: 'app' }, [shell, appFooter()])
 
-  mount(app, buildBackground(), shellWrap)
+  /**
+   * 登录屏自己有一个宿主容器，**和 .app 平级**。
+   *
+   * 这里踩过一个很隐蔽的坑，值得留一笔：登录屏原来直接 mount 到 #app 上，
+   * 而 mount() 会先清空容器 —— 于是整个外壳（侧栏 + 页脚 + main）被一起删掉，
+   * mainNode 从此成了一个**脱离文档的孤儿节点**。后面登录成功再往 mainNode 里画，
+   * 画得再对也没人看得见（DOM 里一切正常，屏幕上还是登录屏）。
+   * 所以：外壳只装一次、永不删除；登录屏和它平级，靠显示/隐藏切换。
+   */
+  const authHost = el('div', { class: 'auth-host' })
+
+  mount(app, buildBackground(), authHost, shellWrap)
 
   // 品牌区在启动时只建一次，所以要单独跟着数据更新，
-  // 否则改了「称呼 / 站点名称」侧栏不会变。
+  // 否则改了「称呼 / 站点名称 / 初试日期」侧栏不会变。
   const syncBrand = () => {
     brandTitle.textContent = state.profile.siteName || '基沃托斯作战本部'
-    brandSub.textContent = `28考研 · ${state.profile.nickname || 'Sensei'}`
+    brandSub.textContent = `${sessionTitleOf(state.profile.examDate)} · ${state.profile.nickname || 'Sensei'}`
   }
   subscribe(syncBrand)
 
-  return { main, sidenav }
+  return { main, sidenav, authHost, shellWrap }
 }
 
 let mainNode = null
+let authHostNode = null
+
+/** 谁占着屏幕：登录屏（等待中）还是作战本部（已进入） */
+function showStage(stage) {
+  document.documentElement.dataset.stage = stage
+}
 
 /* ---------------- 路由 ---------------- */
 
@@ -191,6 +239,7 @@ function parseRoute() {
   const raw = location.hash.replace(/^#\/?/, '').split('?')[0]
   if (NAV.some((n) => n.id === raw)) return raw
   if (AUTH_HASHES.has(raw)) return raw
+  if (DEV_HASHES.has(raw)) return raw
   return ''
 }
 
@@ -215,20 +264,38 @@ function destroyView() {
 }
 
 function render() {
-  // 还没进来（登录流程中）：只画登录那一屏，导航、勋章、标题都不动
-  if (!insideApp) {
+  // 外壳装好之前/正在读会话：只画 wait 屏，**不动地址栏**（原因见 checkingSession 的注释）
+  if (checkingSession) {
+    mount(authHostNode, renderAuthLoading())
+    return
+  }
+
+  // 还在等登录：只画登录那一屏，导航、勋章、标题都不动。
+  // 注意这里**不能**用 insideApp 当判据。外壳虽然是启动时就装好的（要挂 hashchange 和
+  // store 订阅），但装外壳的过程中会写数据（generatePhases → commit），
+  // 那次 commit 会触发订阅 → scheduleRender → 再画一次。
+  // 如果这时候按「有外壳就当进了应用」来判断，第二遍就会把登录屏顶掉、直接放人进首页。
+  // 所以判据是「等登录」这件事本身，而不是「外壳在不在」。
+  if (awaitingAuth) {
     if (!isCloudConfigured()) {
-      mount(app, renderAuthNoBackend())
+      mount(authHostNode, renderAuthNoBackend())
       return
     }
     const route = parseRoute()
+    // 开发用探针：不受登录门禁影响（它本来就是为了在没登录时调场景）
+    if (DEV_HASHES.has(route)) {
+      destroyView()
+      mount(authHostNode, renderSceneProbe(makeCtx(route)))
+      document.title = '场景探针 · ' + (state.profile.siteName || '基沃托斯作战本部')
+      return
+    }
     if (route && !AUTH_HASHES.has(route)) {
-      // 没登录就想直奔某个页面 → 先把路由拨回登录屏，登录成功后再送过去
+      // 没登录就想直奔某个页面 → 先把路由拨回登录屏
       location.replace(`${location.pathname}${location.search}#login`)
       return
     }
     destroyView()
-    mount(app, renderLogin(makeCtx(route || 'login')))
+    mount(authHostNode, renderLogin(makeCtx(route || 'login')))
     document.title = '登录 · ' + (state.profile.siteName || '基沃托斯作战本部')
     return
   }
@@ -253,7 +320,7 @@ function render() {
   updateNav()
   observeReveals(mainNode)
   checkMedals()
-  document.title = `${entry.label} · ${state.profile.siteName || '基沃托斯作战本部'}`
+  document.title = `${entry.label} · ${state.profile.siteName || '基沃托斯作战本部'} · ${sessionTitleOf(state.profile.examDate)}`
 }
 
 function updateNav() {
@@ -389,15 +456,31 @@ async function boot() {
   enableSpotlight(document.body)
   installShortcuts()
 
-  setAuthEnteredHandler(enterApp)
-
-  // 没配置后端 = 纯本地版：一个字都不变，也不要求登录
+  /**
+   * 关键结构：**外壳永远先装好，再决定里面放什么**。
+   *
+   * 装外壳这件事不只是建 DOM —— 它还负责挂上 hashchange 监听、store 订阅、
+   * 云端数据挂钩。如果「未登录」这条分支直接 return、绕过装外壳，
+   * 表面上看只是少了个侧栏，实际上连 hashchange 监听都没挂：
+   * 登录屏上点「去注册」会改 hash 但没人响应，界面一动不动。
+   * 所以这里只分一次岔（谁来当 enterApp 的触发者），初始化路径始终是同一条。
+   */
   if (!isCloudConfigured()) {
-    enterApp(null, { silent: true })
+    // 没配置后端 = 纯本地版：一个字都不变，也不要求登录
+    enterApp({ booting: true, user: null })
+    afterEntry({ booting: true })
     return
   }
 
-  mount(app, renderAuthLoading())
+  // 登录屏提交成功后回调这里：booting 为假 → 会接着做首次同步与引导
+  setAuthEnteredHandler((user) => {
+    enterApp({ booting: false, user })
+    afterEntry({ booting: false })
+  })
+
+  // 外壳先装好（要挂 hashchange 与 store 订阅），再把「正在确认登录状态」放进登录区
+  checkingSession = true
+  enterApp({ booting: true, user: null })
   document.title = '正在进入 · ' + (state.profile.siteName || '基沃托斯作战本部')
 
   let user = null
@@ -406,69 +489,119 @@ async function boot() {
   } catch (err) {
     console.warn('[app] 读取登录状态失败，按未登录处理', err)
   }
+  checkingSession = false
 
-  if (user) {
-    enterApp(user, { silent: true })
-    return
+  if (!user) {
+    // 未登录：把地址栏收敛到登录屏（别把 #settings 这种内部页面留在书签里）。
+    // 探针路由要放行 —— 它本来就是在"没登录"的状态下用的。
+    const route = parseRoute()
+    if (!AUTH_HASHES.has(route) && !DEV_HASHES.has(route)) {
+      history.replaceState(null, '', `${location.pathname}${location.search}#login`)
+    }
   }
 
-  // 未登录：把地址栏收敛到登录屏（别把 #settings 这种内部页面留在书签里）
-  const route = parseRoute()
-  if (!AUTH_HASHES.has(route)) {
-    history.replaceState(null, '', `${location.pathname}${location.search}#login`)
-  }
-  render()
+  enterApp({ booting: true, user })
+  // 只有真的进了应用才做收尾。停在登录屏时不做 ——
+  // 引导弹窗和订单提醒是"进门之后"的事，压在登录表单上只会挡路。
+  if (!awaitingAuth) afterEntry({ booting: true })
 }
 
 /**
- * 进入作战本部。三件事按顺序做：装外壳 → 接上订阅 → 画当前页。
- * 登录流程和「本来就不需要登录」两条路都归到这里，避免两套初始化逻辑各自漂移。
+ * 进入作战本部：
+ *   装外壳 → 挂 hashchange 监听与数据订阅 → 画当前该画的那一屏。
+ *
+ * 两条入口都归到这里，避免两套初始化逻辑各自漂移：
+ *   · 启动时（booting: true）—— 有会话就直接进应用，没有就停在登录屏；
+ *   · 登录屏提交成功后 —— 由 setAuthEnteredHandler 调进来，把盖头掀掉。
+ *
+ * 注意 insideApp 在这里是「外壳装过没有」，**不是**「人进来了没有」——
+ * 这两件事分开的理由见 render() 顶部的注释。真正决定放不放人的是 awaitingAuth。
  */
-function enterApp(user, { silent = false } = {}) {
-  if (insideApp) return
-  insideApp = true
+function enterApp({ booting = false, user = null } = {}) {
+  if (!insideApp) {
+    insideApp = true
 
-  const shells = buildShell()
-  mainNode = shells.main
+    const shells = buildShell()
+    mainNode = shells.main
+    authHostNode = shells.authHost
 
-  // 订阅数据变化：任何 store 改动都会重绘当前视图
-  subscribe(() => scheduleRender())
+    // 订阅数据变化：任何 store 改动都会重绘当前视图
+    subscribe(() => scheduleRender())
 
-  window.addEventListener('hashchange', () => {
-    if (!insideApp) {
-      // 登录流程内部的步骤切换（login ↔ signup ↔ forgot ↔ reset）也走这个事件
+    window.addEventListener('hashchange', () => {
       render()
-      return
+      // 登录屏内部切步骤时不滚动（那一屏本来就短，滚一下反而晃眼）
+      if (!awaitingAuth) window.scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' })
+    })
+
+    // 云端同步（可选后端）：把数据层接上去，然后在后台悄悄对一次账。
+    connectCloud()
+    startCloudSync()
+
+    /**
+     * 会话没了就把人挡回登录屏。
+     *
+     * 三种情况都会走到这里：主动退出登录、refresh token 过期、在另一个标签页里退了。
+     * 没有这一步的话，界面会留在原地 —— 用户点「退出登录」之后还能继续翻自己的数据，
+     * 而那些视图里的同步按钮此时全都会失败，看起来像网站坏了。
+     *
+     * 只在「从有到无」时才动手，且在启动阶段忽略（那时 boot 自己会决定去哪）。
+     */
+    watchSession((user) => {
+      if (user || checkingSession || !insideApp || awaitingAuth) return
+      awaitingAuth = true
+      const route = parseRoute()
+      if (!AUTH_HASHES.has(route)) {
+        history.replaceState(null, '', `${location.pathname}${location.search}#login`)
+      }
+      render()
+      showStage('auth')
+    })
+
+    if (!state.phases.length) {
+      // 第一次进来：把阶段计划先排好，首页立刻有内容
+      generatePhases(new Date(), state.profile.examDate)
     }
-    render()
-    window.scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' })
-  })
-
-  // 云端同步（可选后端）：把数据层接上去，然后在后台悄悄对一次账。
-  connectCloud()
-  startCloudSync()
-
-  if (!state.phases.length) {
-    // 第一次进来：把阶段计划先排好，首页立刻有内容
-    generatePhases(new Date(), state.profile.examDate)
   }
 
-  render()
+  /**
+   * 谁占着屏幕 —— **每次调用都要重算，不能只在建外壳那一次算**。
+   *
+   * 这里踩过一次：原来这行写在 `if (!insideApp)` 里面，于是「启动时先按未登录画登录屏、
+   * 读完会话发现其实有会话」这条路上，第二次 enterApp 会跳过整个分支，
+   * awaitingAuth 永远停在 true —— 明明已经登录，界面却一直卡在登录屏并且把人往回赶。
+   */
+  awaitingAuth = booting && !user
 
-  // 刚刚登录进来 → 顺便对一次账（这次不是后台悄悄对，是可以给用户交代的）
-  if (user && !silent) afterLoginSync()
+  render()
+  showStage(awaitingAuth ? 'auth' : 'app')
+}
+
+/**
+ * 进门之后的收尾：首次同步、首次引导、逾期提醒。
+ *
+ * **不放在 enterApp 里面**：启动时 enterApp 会被调用两次（先按"未登录"装外壳 + 画 wait 屏，
+ * 读完会话再调一次），里面那些 setTimeout 就会排两遍 —— 表现是欢迎弹窗
+ * 从 0.7 秒变成 1.4 秒后才出现，测试和体感都会觉得"慢了一拍"。
+ * 这两处显式各调一次，语义也更清楚：这里才是"人进来了"这件事的落点。
+ */
+function afterEntry({ booting = false } = {}) {
+  // 刚登录进来 → 对一次账（这次不是后台悄悄对，是可以给用户交代的）
+  if (!booting) afterLoginSync()
 
   // 首次使用才引导，避免每天都弹一次
   if (!state.onboarded) {
     setTimeout(showWelcome, 700)
-  } else if (user && !silent) {
-    setTimeout(() => {
-      const overdue = overdueCount()
-      if (overdue > 0) {
-        toast(`有 ${overdue} 条逾期委托，去「每日委托」处理一下`, { kind: 'info', ms: 4000 })
-      }
-    }, 900)
+    return
   }
+  if (booting) return
+
+  setTimeout(() => {
+    const overdue = overdueCount()
+    if (overdue > 0) {
+      toast(`有 ${overdue} 条逾期委托，去「每日委托」处理一下`, { kind: 'info', ms: 4000 })
+    }
+  }, 900)
 }
 
 /**

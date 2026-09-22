@@ -17,9 +17,11 @@ import {
   overdueCount,
   rolloverOverdue,
   goalSummary,
-  subjectById
+  subjectById,
+  sessionTitleOf,
+  examSession
 } from '../lib/store.js'
-import { examCountdown, formatDateCN, relativeDayLabel, formatMinutes, toDateKey } from '../lib/utils.js'
+import { examCountdown, formatDateCN, relativeDayLabel, formatMinutes, toDateKey, daysBetween } from '../lib/utils.js'
 import { icon } from '../components/icons.js'
 import { hoshinoLine, aronaLine, pickScene, EMPTY_HINTS } from '../data/dialogues.js'
 import { buildSnapshot, MEDALS, RARITY } from '../data/medals.js'
@@ -63,16 +65,27 @@ export function renderHome(ctx) {
   const today = todayKey()
 
   /* --- Hero：天空面板。上半是天顶（深，白字），下半是地平线（浅，深色字） --- */
+  // 「已走过 x%」按真实日期算：备考起点 = state.profile.studyStartDate（首次设置时记下）。
+  // 之前写的是 days/460，那是个假设备考期 460 天的硬编码，日期一改就失真。
+  const startKey = state.profile.studyStartDate || state.profile.createdAt || ''
+  let passedPercent = null
+  if (startKey) {
+    const totalSpan = Math.max(daysBetween(startKey, state.profile.examDate), 1)
+    const doneSpan = Math.max(daysBetween(startKey, new Date()), 0)
+    passedPercent = Math.min(Math.max(Math.round((doneSpan / totalSpan) * 100), 0), 100)
+  }
   const hero = el('section', { class: 'sky-panel hero rise' }, [
     el('div', { class: 'countdown' }, [
-      el('div', { class: 'countdown__label' }, `距 28 考研初试（${formatDateCN(state.profile.examDate, false)}）还有`),
+      el('div', { class: 'countdown__label' }, `距 ${sessionTitleOf(state.profile.examDate)}初试（${formatDateCN(state.profile.examDate, false)}）还有`),
       el('div', { class: 'countdown__num num' }, [
         el('span', { id: 'cdDays' }, String(cd.days)),
         el('span', { class: 'countdown__unit' }, '天')
       ]),
       el('div', { class: 'countdown__meta' }, [
         el('span', {}, cd.remainWeeksText),
-        el('span', {}, `已走过 ${Math.max(0, 100 - Math.round((cd.days / 460) * 100))}%`),
+        passedPercent === null
+          ? el('span', {}, `初试 ${examSession(state.profile.examDate).year} 年 12 月`)
+          : el('span', {}, `已走过 ${passedPercent}%`),
         el('span', { class: 'countdown__phase' }, phaseText())
       ]),
       // 光环挂在 countdown 里（countdown 自成层叠上下文），才压得住天色、又垫在数字后面
