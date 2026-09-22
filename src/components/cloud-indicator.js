@@ -58,11 +58,13 @@ export function mountCloudIndicator(sidenav) {
     {
       class: 'nav-cloud',
       type: 'button',
-      dataset: { state: 'idle', testid: 'nav-cloud' },
+      dataset: { state: 'idle', testid: 'nav-cloud', target: 'login' },
       'aria-label': '云端同步状态',
-      title: '云端同步：点一下去设置里查看',
+      title: '还没登录：点一下去登录',
       onClick: () => {
-        location.hash = 'settings'
+        // 没登录时落点应该是登录屏，而不是设置页 —— 设置页里的同步面板
+        // 在没登录时只剩一个「去登录」按钮，多点一次纯属浪费。
+        location.hash = node.dataset.target === 'settings' ? 'settings' : 'login'
       }
     },
     [icon('cloud', { size: 16, className: 'nav-cloud__icon' }), text]
@@ -73,6 +75,9 @@ export function mountCloudIndicator(sidenav) {
     const status = cloudStatus()
     node.dataset.state = stateOf(status, currentUser)
     text.textContent = describe(status, currentUser)
+    const loggedOut = !currentUser
+    node.dataset.target = loggedOut ? 'login' : 'settings'
+    node.title = loggedOut ? '还没登录：点一下去登录' : '云端同步：点一下去设置里查看'
   }
 
   onCloudStatus(paint)

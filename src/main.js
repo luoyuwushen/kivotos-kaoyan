@@ -4,7 +4,7 @@
 
 import './styles/main.css'
 
-import { el, mount, toDateKey, examCountdown } from './lib/utils.js'
+import { el, mount, toDateKey, examCountdown, formatDateCN } from './lib/utils.js'
 import {
   state,
   subscribe,
@@ -17,7 +17,7 @@ import {
   updateProfile,
   connectCloud
 } from './lib/store.js'
-import { cloudMeta, currentUser, runSync } from './lib/cloud.js'
+import { cloudMeta, currentUser, runSync, isCloudConfigured, isStateEmpty, forcePull } from './lib/cloud.js'
 import { icon, brandMark } from './components/icons.js'
 import { toast, enableSpotlight, observeReveals, openModal, REDUCED } from './components/ui.js'
 import { appFooter } from './components/footer.js'
@@ -32,6 +32,7 @@ import { renderMistakes } from './views/mistakes.js'
 import { renderGoals } from './views/goals.js'
 import { renderMedals } from './views/medals.js'
 import { renderSettings, applyTheme } from './views/settings.js'
+import { renderLogin, renderAuthLoading, renderAuthNoBackend, setAuthEnteredHandler, AUTH_ROUTES } from './views/login.js'
 
 /* ---------------- 导航定义 ---------------- */
 
@@ -51,10 +52,16 @@ let currentView = 'home'
 let viewDestroyers = []
 let rerenderScheduled = false
 
+/** 已经进入作战本部（登录通过 / 本来就不需要登录） */
+let insideApp = false
+
+const AUTH_HASHES = new Set(AUTH_ROUTES)
+
 /* ---------------- 渲染上下文 ---------------- */
 
-function makeCtx() {
+function makeCtx(route) {
   return {
+    route,
     go(view) {
       if (location.hash.slice(1) === view) return
       location.hash = view
@@ -179,9 +186,12 @@ let mainNode = null
 
 /* ---------------- 路由 ---------------- */
 
-function parseHash() {
+/** 当前 hash 指向哪一屏：主应用的页面 id，或登录流程里的某一屏 */
+function parseRoute() {
   const raw = location.hash.replace(/^#\/?/, '').split('?')[0]
-  return NAV.some((n) => n.id === raw) ? raw : 'home'
+  if (NAV.some((n) => n.id === raw)) return raw
+  if (AUTH_HASHES.has(raw)) return raw
+  return ''
 }
 
 function scheduleRender() {
@@ -193,11 +203,7 @@ function scheduleRender() {
   })
 }
 
-function render() {
-  currentView = parseHash()
-  const entry = NAV.find((n) => n.id === currentView) || NAV[0]
-
-  // 清理上一个视图的定时器 / 订阅
+function destroyView() {
   for (const destroy of viewDestroyers) {
     try {
       destroy()
@@ -206,9 +212,42 @@ function render() {
     }
   }
   viewDestroyers = []
+}
 
-  const ctx = makeCtx()
-  const view = entry.render(ctx)
+function render() {
+  // 还没进来（登录流程中）：只画登录那一屏，导航、勋章、标题都不动
+  if (!insideApp) {
+    if (!isCloudConfigured()) {
+      mount(app, renderAuthNoBackend())
+      return
+    }
+    const route = parseRoute()
+    if (route && !AUTH_HASHES.has(route)) {
+      // 没登录就想直奔某个页面 → 先把路由拨回登录屏，登录成功后再送过去
+      location.replace(`${location.pathname}${location.search}#login`)
+      return
+    }
+    destroyView()
+    mount(app, renderLogin(makeCtx(route || 'login')))
+    document.title = '登录 · ' + (state.profile.siteName || '基沃托斯作战本部')
+    return
+  }
+
+  const route = parseRoute()
+  // 登录之后 hash 还停在登录屏（或指向一个不存在的页面）→ 落到首页。
+  // 注意这里必须用 history.replaceState 而不是 location.replace：
+  // 后者会触发一次 hashchange → 又一次 render，而这时 insideApp 已经是 true，
+  // 就变成「render 改 hash → hashchange → render」的自我循环。
+  if (!route || AUTH_HASHES.has(route)) {
+    history.replaceState(null, '', `${location.pathname}${location.search}#home`)
+  }
+  currentView = parseRoute() || 'home'
+  const entry = NAV.find((n) => n.id === currentView) || NAV[0]
+
+  // 清理上一个视图的定时器 / 订阅
+  destroyView()
+
+  const view = entry.render(makeCtx(currentView))
 
   mount(mainNode, view)
   updateNav()
@@ -334,8 +373,60 @@ async function startCloudSync() {
 
 /* ---------------- 初始化 ---------------- */
 
-function boot() {
+/**
+ * 启动顺序（顺序本身就是设计）：
+ *   1. 先把主题和全局交互挂上，再把「正在确认登录状态」这一屏画出来 ——
+ *      会话要在拿到 SDK 之后才读得到，中间这段空档必须有个交代；
+ *   2. 读会话（没配后端时这一步是空操作，立刻返回 null）；
+ *   3. 有人 → 直接装外壳进应用；没人 → 停在登录屏，等他登录。
+ *
+ * 为什么登录屏要**先画**再读会话：读会话最快也要几十毫秒，慢的时候（冷启动 + 弱网）
+ * 能到一两秒。先画出来，读完之后要么原地换成登录表单、要么整屏换成应用，
+ * 用户看到的是「一直在动」，而不是「白屏 → 突然出现」。
+ */
+async function boot() {
   applyTheme(state.settings.theme || 'light')
+  enableSpotlight(document.body)
+  installShortcuts()
+
+  setAuthEnteredHandler(enterApp)
+
+  // 没配置后端 = 纯本地版：一个字都不变，也不要求登录
+  if (!isCloudConfigured()) {
+    enterApp(null, { silent: true })
+    return
+  }
+
+  mount(app, renderAuthLoading())
+  document.title = '正在进入 · ' + (state.profile.siteName || '基沃托斯作战本部')
+
+  let user = null
+  try {
+    user = await currentUser()
+  } catch (err) {
+    console.warn('[app] 读取登录状态失败，按未登录处理', err)
+  }
+
+  if (user) {
+    enterApp(user, { silent: true })
+    return
+  }
+
+  // 未登录：把地址栏收敛到登录屏（别把 #settings 这种内部页面留在书签里）
+  const route = parseRoute()
+  if (!AUTH_HASHES.has(route)) {
+    history.replaceState(null, '', `${location.pathname}${location.search}#login`)
+  }
+  render()
+}
+
+/**
+ * 进入作战本部。三件事按顺序做：装外壳 → 接上订阅 → 画当前页。
+ * 登录流程和「本来就不需要登录」两条路都归到这里，避免两套初始化逻辑各自漂移。
+ */
+function enterApp(user, { silent = false } = {}) {
+  if (insideApp) return
+  insideApp = true
 
   const shells = buildShell()
   mainNode = shells.main
@@ -344,34 +435,88 @@ function boot() {
   subscribe(() => scheduleRender())
 
   window.addEventListener('hashchange', () => {
+    if (!insideApp) {
+      // 登录流程内部的步骤切换（login ↔ signup ↔ forgot ↔ reset）也走这个事件
+      render()
+      return
+    }
     render()
     window.scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' })
   })
 
-  enableSpotlight(document.body)
-  installShortcuts()
-
   // 云端同步（可选后端）：把数据层接上去，然后在后台悄悄对一次账。
-  // 没配置 Supabase 的话，整个函数会立刻返回，一次网络请求都不会发。
   connectCloud()
   startCloudSync()
 
   if (!state.phases.length) {
-    // 第一次打开：把阶段计划先排好，首页立刻有内容
+    // 第一次进来：把阶段计划先排好，首页立刻有内容
     generatePhases(new Date(), state.profile.examDate)
   }
 
-  // 逾期提醒（只提醒，不自动改数据）
-  const overdue = overdueCount()
-  if (overdue > 0 && !state.onboarded) {
+  render()
+
+  // 刚刚登录进来 → 顺便对一次账（这次不是后台悄悄对，是可以给用户交代的）
+  if (user && !silent) afterLoginSync()
+
+  // 首次使用才引导，避免每天都弹一次
+  if (!state.onboarded) {
+    setTimeout(showWelcome, 700)
+  } else if (user && !silent) {
     setTimeout(() => {
-      toast(`有 ${overdue} 条逾期委托，去「每日委托」处理一下`, { kind: 'info', ms: 4000 })
-    }, 1200)
+      const overdue = overdueCount()
+      if (overdue > 0) {
+        toast(`有 ${overdue} 条逾期委托，去「每日委托」处理一下`, { kind: 'info', ms: 4000 })
+      }
+    }, 900)
+  }
+}
+
+/**
+ * 登录成功之后的第一次同步。
+ *
+ * 这套判断原来长在设置页里（原来登录表单也在那儿）。搬到登录流程上之后，
+ * 规则一个字没改，因为它踩过的坑是真的：
+ *
+ *   · **本机是空的、云端有数据** → 直接拉，永远不要问。
+ *     全新设备登录时本机是空的，如果这时候弹「保留本机还是云端」，
+ *     用户一旦点错「保留本机」，几个月的数据就被一份空白覆盖了。空 ≠ 用户的最新数据。
+ *   · 云端为空 → 直接把本机数据推上去，答案唯一，也不必问。
+ *   · 只有两边都有内容、且都改过，才真的需要人来定夺。
+ */
+async function afterLoginSync() {
+  let result
+  try {
+    result = await runSync({ auto: false })
+  } catch (err) {
+    toast(`同步失败：${err.message}`, { kind: 'error', ms: 6000 })
+    return
   }
 
-  if (!state.onboarded) showWelcome()
+  if (result.action === 'conflict') {
+    if (isStateEmpty(state)) {
+      const pulled = await forcePull()
+      toast(pulled.ok ? '已从云端恢复你的数据' : pulled.message, {
+        kind: pulled.ok ? 'ok' : 'error',
+        ms: 5000
+      })
+      return
+    }
+    toast('云端和本机都有新改动，去「设置 → 云端同步」选一边', {
+      kind: 'info',
+      ms: 7000,
+      iconName: 'cloud'
+    })
+    return
+  }
 
-  render()
+  if (result.ok) {
+    if (result.action === 'pull' || result.action === 'push') {
+      toast(`已同步：${result.message}`, { kind: 'ok', iconName: 'cloud' })
+    }
+    return
+  }
+
+  toast(result.message, { kind: 'error', ms: 6000 })
 }
 
 /* ---------------- 首次引导 ---------------- */

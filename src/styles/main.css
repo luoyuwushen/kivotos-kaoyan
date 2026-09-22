@@ -2747,3 +2747,461 @@ canvas {
   }
 }
 
+/* ==========================================================================
+   22. 进入作战本部（登录 / 注册 / 忘记密码 / 设置新密码）
+   --------------------------------------------------------------------------
+   这一屏不在 .shell 里：没有侧栏、没有页脚，天空**铺满整页**。
+   参数来自 DESIGN.md 第 4.1 节那条被审计过的渐变（天顶 → 地平线，白字压在前 42%），
+   所以左栏的白字落在最深处，对比度是算出来的、不是挑出来的。
+
+   右栏刻意做成"事务局窗口"：白纸、直角（--r-sm）、顶上一道斜杠饰带。
+   整站的卡片都是 18px 圆角，这里不跟 —— 差别本身就是信息：
+   它是一张递出来的表，不是应用里的一个模块。
+   ========================================================================== */
+
+.auth {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* 天色背景。和首页天空面板同一套色标 —— 白字要 4.5:1 就得压在 42% 以内 */
+.auth__sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(85% 55% at 88% 100%, rgba(var(--surface-rgb), 0.7) 0%, transparent 62%),
+    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 34%, var(--sky-3) 58%, var(--sky-4) 82%, var(--bg) 100%);
+}
+
+.auth__inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1060px;
+  padding: clamp(1rem, 4vw, 2rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 408px);
+  gap: clamp(1.5rem, 5vw, 3.5rem);
+  align-items: center;
+}
+
+.auth--bare .auth__inner,
+.auth--loading .auth__inner {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  max-width: 480px;
+}
+
+/* ---------------- 左栏：这场作战本身 ---------------- */
+
+.auth-mission {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.75rem, 5vh, 3rem);
+  color: var(--on-accent);
+  min-width: 0;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.auth-brand__title {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.auth-brand__sub {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: rgba(var(--surface-rgb), 0.78);
+}
+
+/* 倒计时：小型深色贴片 —— 面板内所有 13–14px 小字都这么处理（DESIGN.md 第 2 节） */
+.auth-mission__count {
+  position: relative;
+  isolation: isolate;
+  margin-top: clamp(1.5rem, 6vh, 3rem);
+}
+
+.auth-mission__label {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.auth-mission__num {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-family: var(--font-num);
+  font-size: clamp(3.5rem, 7.5vw, 6rem);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.035em;
+  text-shadow: 0 6px 22px rgba(var(--accent-ink-rgb), 0.35);
+}
+
+.auth-mission__num .countdown__unit {
+  font-size: clamp(1.125rem, 2.2vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.auth-mission__foot {
+  min-width: 0;
+}
+
+.auth-mission__meta {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: rgba(var(--surface-rgb), 0.86);
+}
+
+.auth-mission__halo {
+  opacity: 0.5;
+}
+
+/* 阶段长条：走过的部分填实，剩下的是四个阶段各自的颜色 */
+.auth-phases__track {
+  position: relative;
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(var(--accent-ink-rgb), 0.4);
+  box-shadow: inset 0 1px 0 rgba(var(--surface-rgb), 0.25);
+}
+
+.auth-phases__track > .auth-phases {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.auth-phases__seg {
+  display: block;
+  height: 100%;
+  border-radius: 0;
+}
+
+.auth-phases__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-sky), rgba(var(--surface-rgb), 0.92));
+  box-shadow: 0 0 14px rgba(84, 220, 254, 0.55);
+}
+
+/* ---------------- 右栏：事务局窗口 ---------------- */
+
+.auth-desk {
+  position: relative;
+  background: var(--surface);
+  border: 3px solid rgba(var(--surface-rgb), 0.9);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  box-shadow: 0 20px 48px -20px rgba(var(--accent-ink-rgb), 0.72);
+  overflow: hidden;
+}
+
+.auth-desk__strap {
+  display: flex;
+  height: 15px;
+  padding: 0 1.25rem;
+  align-items: center;
+  background: var(--surface-alt);
+  border-bottom: 2px solid var(--border);
+}
+
+.auth-desk__body {
+  padding: clamp(1.25rem, 2.6vw, 1.875rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+
+.auth-head__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.375rem, 2.6vw, 1.75rem);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.auth-head__sub {
+  margin-top: 0.3rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+/* 表单 ------------------------------------------------ */
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.auth-field__label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.auth-field__body {
+  position: relative;
+}
+
+.auth-field__body--with-peek .input {
+  padding-right: 3rem;
+}
+
+/* 显示 / 隐藏密码 */
+.auth-field__peek {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 0.18s ease, background-color 0.18s ease;
+}
+
+.auth-field__peek:hover {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+}
+
+.auth-field__peek:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.auth-field__hint {
+  font-size: 0.75rem;
+  line-height: 1.65;
+  color: var(--text-tertiary);
+}
+
+.auth-field__error {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--error);
+}
+
+.auth-form .input[aria-invalid='true'] {
+  border-color: var(--error);
+}
+
+.auth-feedback {
+  padding: 0.55rem 0.75rem;
+  border: 2px solid var(--border);
+  border-radius: var(--r-sm);
+  background: rgba(var(--error-rgb), 0.1);
+  border-color: rgba(var(--error-rgb), 0.45);
+  color: var(--error);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 0.125rem;
+}
+
+/* 表单下面那几条次级路径：登录链接、重发确认信、忘记密码 */
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin-top: 0.25rem;
+}
+
+.auth-link {
+  padding: 0.15rem 0;
+  border: none;
+  background: none;
+  color: var(--accent-deep);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(var(--accent-rgb), 0.4);
+  cursor: pointer;
+  transition: color 0.18s ease, text-decoration-color 0.18s ease;
+}
+
+.auth-link:hover {
+  color: var(--accent-hover);
+  text-decoration-color: currentColor;
+}
+
+.auth-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-alt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--border);
+}
+
+.auth-hint {
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  color: var(--text-tertiary);
+}
+
+/* 跨步骤留话：注册完要先去邮箱、重置邮件已发出、新密码已生效 */
+.auth-note {
+  padding: 0.6rem 0.75rem;
+  border: 2px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+/* 等待屏 ------------------------------------------------ */
+
+.auth-wait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 0;
+  color: var(--on-accent);
+  text-align: center;
+}
+
+.auth-wait__text {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: rgba(var(--surface-rgb), 0.9);
+}
+
+/* 响应式 ------------------------------------------------ */
+
+/* 平板：天色压成顶部一条，面板落到它下面。
+   到了这个宽度，左栏的倒计时已经挤不出气势，不如把它留在天上当氛围。 */
+@media (max-width: 900px) {
+  .auth {
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
+  .auth__inner {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 520px;
+    gap: clamp(1.25rem, 5vw, 2rem);
+    padding: clamp(1rem, 4vw, 1.5rem);
+    align-content: start;
+  }
+
+  .auth-mission {
+    gap: 1.25rem;
+    padding-top: 0.5rem;
+  }
+
+  .auth-mission__count {
+    margin-top: 1rem;
+  }
+
+  .auth-mission__num {
+    font-size: clamp(3.25rem, 15vw, 4.5rem);
+  }
+
+  /* 天色从"铺满"改成"从上往下化开"，面板区域留出浅底给白纸 */
+  .auth__sky {
+    background: linear-gradient(
+      180deg,
+      var(--sky-1) 0%,
+      var(--sky-2) 22%,
+      var(--sky-3) 38%,
+      var(--sky-4) 54%,
+      var(--bg) 66%
+    );
+  }
+
+  .auth__sky .bg-hatch,
+  .auth__sky .bg-bloom--far {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .auth__sky .bg-ray {
+    display: none;
+  }
+
+  .auth-desk__body {
+    padding: 1.125rem 1rem 1.25rem;
+  }
+
+  .auth-links {
+    gap: 0.3rem 1rem;
+  }
+
+  .auth-mission__foot {
+    display: none;
+  }
+}
+
+/* 深色：天色本身已经在 token 里压深了，只需把面板的白色描边收掉 */
+:root[data-theme='dark'] .auth-desk {
+  border-color: var(--border-strong);
+  box-shadow: 0 20px 48px -20px rgba(0, 0, 0, 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-mission__halo {
+    animation: none !important;
+  }
+}
+
+

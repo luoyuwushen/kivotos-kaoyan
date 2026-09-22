@@ -29,12 +29,8 @@ import {
   onCloudStatus,
   cloudStatus,
   cloudMeta,
-  signInWithEmail,
-  signInWithPassword,
-  signUpWithPassword,
   signOut,
   clearCloudConfig,
-  resendConfirmEmail,
   runSync,
   pullCloud,
   forcePush,
@@ -275,8 +271,12 @@ let renderedUserId = ''
  * 这张卡片是「真正的后端」在界面上的全部入口。
  * 三种状态各自渲染一套 UI：
  *   ① 还没配置 Supabase  → 粘贴项目地址 + anon key（附建表 SQL 的说明）
- *   ② 配置好了但没登录   → 邮箱魔法链接 / 邮箱+密码
+ *   ② 配置好了但没登录   → 一个「去登录」按钮，真正的表单在登录屏上
  *   ③ 已登录             → 立即同步、保留哪一边、退出、删除云端数据
+ *
+ * ② 为什么不在卡片里再放一套表单：登录页现在是独立的一屏（views/login.js），
+ * 那里有忘记密码、显示密码、行内校验这些必须有的东西。设置页再放一份精简版，
+ * 等于同一个流程两处实现 —— 迟早会出现「这边能改密码、那边不能」的分叉。
  */
 function cloudCard(ctx) {
   const card = sectionCard('云端同步（可选后端）', 'cloud')
@@ -369,7 +369,7 @@ function cloudCard(ctx) {
     })
     currentUser().then(async (user) => {
       if (cancelled) return
-      accountSlot.append(user ? await accountPanel(ctx, user) : loginForm(ctx))
+      accountSlot.append(user ? await accountPanel(ctx, user) : loginPrompt(ctx))
     })
   }
   return card.node
@@ -475,107 +475,31 @@ function clearCloudConfigAndReload(ctx) {
   ctx.refresh()
 }
 
-/** ② 已配置未登录 */
-function loginForm(ctx) {
-  const emailInput = el('input', {
-    class: 'input',
-    type: 'email',
-    placeholder: 'you@example.com',
-    autocomplete: 'email',
-    spellcheck: 'false',
-    dataset: { testid: 'cloud-email' }
-  })
-  const passwordInput = el('input', {
-    class: 'input',
-    type: 'password',
-    placeholder: '至少 6 位（用魔法链接登录可以不填）',
-    autocomplete: 'current-password',
-    dataset: { testid: 'cloud-password' }
-  })
-  const busy = { value: false }
-
-  const run = async (button, label, fn) => {
-    if (busy.value) return
-    busy.value = true
-    const original = button.textContent
-    button.textContent = label
-    button.disabled = true
-    try {
-      await fn()
-      ctx.refresh()
-    } catch (err) {
-      toast(err.message, { kind: 'error', ms: 6000 })
-      button.textContent = original
-      button.disabled = false
-    } finally {
-      busy.value = false
-    }
-  }
-
-  const email = () => emailInput.value.trim()
-  const password = () => passwordInput.value
-
-  const magicButton = el('button', {
-    class: 'btn btn--sm btn--primary',
-    type: 'button',
-    dataset: { testid: 'cloud-magic-link' },
-    onClick: (event) => run(event.currentTarget, '正在发送…', async () => {
-      if (!email()) throw new Error('先填邮箱')
-      await signInWithEmail(email())
-      toast('登录链接已发出，去邮箱点一下（没收到就看垃圾邮件）', { kind: 'ok', ms: 7000 })
-    })
-  }, [icon('arrowRight', { size: 15 }), '发登录链接（免密码）'])
-
-  const passwordLogin = el('button', {
-    class: 'btn btn--sm',
-    type: 'button',
-    dataset: { testid: 'cloud-password-login' },
-    onClick: (event) => run(event.currentTarget, '登录中…', async () => {
-      if (!email() || !password()) throw new Error('邮箱和密码都要填')
-      await signInWithPassword(email(), password())
-      toast('登录成功，正在同步…', { kind: 'ok' })
-      await afterLogin(ctx)
-    })
-  }, '用密码登录')
-
-  const passwordSignup = el('button', {
-    class: 'btn btn--sm btn--ghost',
-    type: 'button',
-    onClick: (event) => run(event.currentTarget, '注册中…', async () => {
-      if (!email() || password().length < 6) throw new Error('邮箱要填，密码至少 6 位')
-      const { needsConfirm } = await signUpWithPassword(email(), password())
-      if (needsConfirm) {
-        toast('注册成功，请先去邮箱点确认链接，再回来登录', { kind: 'info', ms: 7000 })
-      } else {
-        toast('注册并登录成功', { kind: 'ok' })
-        await afterLogin(ctx)
-      }
-    })
-  }, '注册新账号')
-
+/**
+ * ② 已配置、未登录。
+ *
+ * 正常流程下走不到这里 —— 没登录的人根本进不了应用，看到的是登录屏。
+ * 留着这套是为了兜住两种边角情况：会话在设置页停留期间失效（被别的标签页退出、
+ * 或 refresh token 过期），以及直接手敲 `#settings` 掉进来的旧书签。
+ * 两种情况都只需要一句话 + 一个把人送去登录屏的按钮。
+ */
+function loginPrompt(ctx) {
   return el('div', { class: 'stack', dataset: { testid: 'cloud-login' } }, [
-    el('div', { class: 'grid-auto' }, [
-      el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '邮箱'), emailInput]),
-      el('label', { class: 'field' }, [el('span', { class: 'field__label' }, '密码（可选）'), passwordInput])
-    ]),
-    el('div', { class: 'row' }, [magicButton, passwordLogin, passwordSignup]),
-    el('div', { class: 'row' }, [
+    el('div', { class: 'row', style: { justifyContent: 'space-between' } }, [
+      el('div', {}, [
+        el('div', { style: { fontWeight: '700' } }, '当前未登录'),
+        el('div', { class: 'dim-2', style: { fontSize: '0.8125rem', marginTop: '0.15rem' } },
+          '登录之后，这份数据会在你的设备之间自动同步。')
+      ]),
       el('button', {
-        class: 'btn btn--sm btn--ghost',
+        class: 'btn btn--sm btn--primary',
         type: 'button',
-        dataset: { testid: 'cloud-resend' },
-        onClick: (event) => run(event.currentTarget, '正在重发…', async () => {
-          if (!email()) throw new Error('先填邮箱')
-          await resendConfirmEmail(email())
-          toast('确认邮件已重发，去邮箱点一下链接就能登录了', { kind: 'ok', ms: 7000 })
-        })
-      }, '没收到确认邮件？重发一封')
-    ]),
-    el('div', { class: 'dim-2', style: { fontSize: '0.75rem', lineHeight: '1.7' } },
-      '· 第一次用「发登录链接」最省事：Supabase 会给你发一封带链接的邮件，点一下就算登录了。' +
-      '  链接只能用一次，而且只能在同一台设备的同一个浏览器里打开。\n' +
-      '· 提示「邮箱还没确认」= 你的项目开着 Confirm email，先去邮件里点确认链接（没收到就点上面那个重发）。\n' +
-      '· 提示「发送太频繁」= Supabase 免费版每小时只允许发极少量邮件，等一会儿或直接用密码登录。')
+        dataset: { testid: 'cloud-go-login' },
+        onClick: () => {
+          location.hash = 'login'
+        }
+      }, [icon('arrowRight', { size: 15 }), '去登录'])
+    ])
   ])
 }
 
@@ -685,42 +609,6 @@ async function accountPanel(ctx, user) {
     )
   }
   return panel
-}
-
-/** 登录成功后：首次同步要用户自己选方向 */
-/**
- * 登录成功后决定下一步该做什么。
- *
- * 这里原来只看 `cloudMeta().initialized`（本机有没有同步过）就弹「保留哪边」，
- * 结果在一个很常见的场景下是危险的：**全新设备登录**时本机是空的，
- * 用户被问「保留本机还是云端」，只要点错「保留本机」，云端那份备份就被空白覆盖了。
- *
- * 改成先让同步引擎自己判断（它知道本机是不是空的、云端有没有数据）：
- *   · 能自己决定（新设备直接拉 / 云端为空直接推）→ 静默同步完，不打扰用户
- *   · 真的分不清（两边都有数据且都改过）→ 才弹窗让用户选
- */
-async function afterLogin(ctx) {
-  const result = await runSync({ auto: false })
-  if (result.action === 'conflict') {
-    // 本机空、云端有数据，却被判定成冲突：也是「该拉不该问」，直接拉
-    if (isStateEmpty(state)) {
-      const pulled = await forcePull()
-      toast(pulled.ok ? '已从云端恢复你的数据' : pulled.message, {
-        kind: pulled.ok ? 'ok' : 'error',
-        ms: 5000
-      })
-      return
-    }
-    openConflictDialog(ctx)
-    return
-  }
-  if (result.ok) {
-    toast(`已同步：${result.message}`, { kind: 'ok' })
-    return
-  }
-  // 需要用户定夺的首次同步（两边都有内容）
-  if (!cloudMeta().initialized) openFirstSyncDialog(ctx)
-  else toast(result.message, { kind: 'error', ms: 6000 })
 }
 
 /** 「这份数据以谁为准」——唯一一个会覆盖数据的弹窗，所以写清楚后果 */
