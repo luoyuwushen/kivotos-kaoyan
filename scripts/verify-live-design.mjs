@@ -10,6 +10,8 @@ import { chromium } from 'playwright'
 import { mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+// 造一份「已登录」的会话，否则站点会把人拦在登录屏，站内视觉一项都量不到
+import { installFakeBackend } from './lib/test-session.mjs'
 
 const BASE = process.env.TARGET || 'https://luoyuwushen.github.io/kivotos-kaoyan/'
 const OUT = process.env.OUT || join(tmpdir(), 'kaoyan-verify-design')
@@ -51,6 +53,13 @@ await context.addInitScript(([k, v]) => { try { localStorage.setItem(k, v) } cat
 const page = await context.newPage()
 await page.route('**://fonts.googleapis.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/css', body: '' }))
 await page.route('**://fonts.gstatic.com/**', (r) => r.abort())
+/**
+ * 站点配了后端之后，**没登录会被登录屏挡在门外**（首屏就是 #login），
+ * 而这份脚本要逐页量天空面板、卡片、导航这些站内视觉 —— 没有会话就一项都量不到
+ * （表现是「通过 25/49」，看着像设计坏了，其实是被门禁拦住了）。
+ * 所以先装一份假会话：只造会话、不验同步，同步协议由 test-cloud.mjs 专门验。
+ */
+await installFakeBackend(page)
 
 const failed = []
 page.on('response', (r) => { if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`) })
