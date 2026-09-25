@@ -1,5 +1,5 @@
 arona_workpage_nighttime_2.png
-size:2048,2048
+size:4096,4096
 filter:Linear,Linear
 scale:1.12
 A_00_Desk
@@ -1017,7 +1017,7 @@ Skirt_Pattern_Original
 bounds:476,3568,272,308
 
 arona_workpage_nighttime_2_2.png
-size:1024,2048
+size:2048,4096
 filter:Linear,Linear
 scale:1.12
 BG/BG_floor

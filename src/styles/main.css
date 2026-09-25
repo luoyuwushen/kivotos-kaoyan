@@ -3286,6 +3286,151 @@ canvas {
   color: rgba(var(--surface-rgb), 0.9);
 }
 
+/* 登录场景保留原画的 16:9 构图，表单置于画面之外。 */
+.auth--scene .auth__inner {
+  max-width: 1380px;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 408px);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 3rem);
+}
+
+.auth--scene .auth-mission {
+  gap: 1rem;
+}
+
+.auth--scene .auth-mission__count {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+}
+
+.auth--scene .auth-mission__label {
+  margin: 0;
+}
+
+.auth--scene .auth-mission__num {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--r-md);
+  background: var(--auth-chip);
+  font-size: 2.5rem;
+  text-shadow: none;
+}
+
+.auth--scene .auth-mission__num .countdown__unit {
+  font-size: 1rem;
+}
+
+.auth--scene .auth-mission__halo {
+  display: none;
+}
+
+.login-scene {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  background: var(--sky-1);
+  border: 2px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.login-scene__canvas,
+.login-scene__poster {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.login-scene__poster {
+  position: absolute;
+  top: 0;
+  left: 0;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.login-scene__canvas {
+  opacity: 0;
+  cursor: pointer;
+}
+
+.login-scene[data-state='ready'] .login-scene__canvas {
+  opacity: 1;
+}
+
+.login-scene[data-state='ready'] .login-scene__poster {
+  visibility: hidden;
+}
+
+.login-scene__bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.25rem 0.75rem;
+  background: var(--auth-chip);
+  color: var(--on-accent);
+  font-size: 0.8125rem;
+}
+
+.login-scene__poke {
+  min-height: 36px;
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+}
+
+.login-scene__poke:focus-visible {
+  outline: 2px solid var(--on-accent);
+  outline-offset: 1px;
+}
+
+.login-scene__poke:disabled {
+  visibility: hidden;
+}
+
+.login-entry {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  justify-items: center;
+  align-items: end;
+  padding: 0 1rem 12vh;
+  background: var(--surface);
+}
+
+.login-entry__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.login-entry__message {
+  position: relative;
+  padding: 0.65rem 1.25rem;
+  border-radius: var(--r-md);
+  color: var(--on-accent);
+  background: var(--auth-chip);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-scene__canvas { cursor: default; }
+}
+
 /* 响应式 ------------------------------------------------ */
 
 /* 平板：天色压成顶部一条，面板落到它下面。
@@ -3303,6 +3448,16 @@ canvas {
     gap: clamp(1.25rem, 5vw, 2rem);
     padding: clamp(1rem, 4vw, 1.5rem);
     align-content: start;
+  }
+
+  .auth--scene .auth__inner {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 620px;
+    gap: 1.25rem;
+  }
+
+  .auth--scene .auth-mission__num {
+    font-size: 2rem;
   }
 
   .auth-mission {
@@ -3384,5 +3539,4 @@ canvas {
     animation: none !important;
   }
 }
-
 

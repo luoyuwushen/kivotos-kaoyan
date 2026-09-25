@@ -19,6 +19,7 @@ import {
 } from '../lib/store.js'
 import { icon } from '../components/icons.js'
 import { toast, openModal, confirmDialog } from '../components/ui.js'
+import { NONCOMMERCIAL_NOTICE, CHARACTER_NOTICE, SPINE_NOTICE } from '../components/footer.js'
 import { setAuthNotice } from './login.js'
 import { CHARACTERS, resetCustomImageCache } from '../components/characters.js'
 import { isAiReady, aiConfig } from '../lib/ai.js'
@@ -956,9 +957,9 @@ function aboutCard() {
       el('div', {}, '数据默认只存在这台设备的浏览器里。清理浏览器数据会一并清掉，请定期导出备份。'),
       el('div', { class: 'card card--flat', style: { padding: '0.75rem 0.875rem' } }, [
         el('div', { style: { fontWeight: '700' } }, '用途与版权声明'),
-        el('div', { style: { marginTop: '0.25rem' } }, '本站为个人备考自用的非商业网站，无广告、无收费、无任何形式的盈利。'),
-        el('div', { style: { marginTop: '0.35rem' } },
-          '《蔚蓝档案》及其角色（小鸟游星野、阿洛娜、普拉娜）版权归 Nexon / Yostar 所有。本站为非官方粉丝作品，站内 Q 版形象为自行绘制的原创图形，不使用官方立绘与游戏内素材。')
+        el('div', { style: { marginTop: '0.25rem' } }, NONCOMMERCIAL_NOTICE),
+        el('div', { style: { marginTop: '0.35rem' } }, CHARACTER_NOTICE),
+        el('div', { style: { marginTop: '0.35rem' } }, SPINE_NOTICE)
       ]),
       el('div', { class: 'mono dim-2', style: { fontSize: '0.6875rem' } }, `本地存储键名：${STORAGE_KEY}`)
     ])

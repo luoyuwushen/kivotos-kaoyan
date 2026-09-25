@@ -16,8 +16,8 @@
  * 「我忘了密码，想重新设一个」，所以这里走 Supabase 的 recovery 流程：
  * 邮件里点回来 → 临时会话 → 设置新密码 → 用新密码重新登录。
  *
- * 视觉上这一屏是整页唯一的天空：左边是这场作战本身（倒计时 + 阶段长条），
- * 右边是一块**事务局窗口**（白纸黑字、直角、顶部一条饰带）。
+ * 视觉上左边是完整 16:9 教室、备考倒计时与阶段长条，右边是事务局窗口。
+ * 教室加载失败时保留同幕静态图，认证与进入应用不依赖 Spine 素材。
  * 刻意不做成「渐变背景 + 居中白卡」那套通用登录页 —— 见 DESIGN.md。
  */
 
@@ -25,6 +25,7 @@ import { el, examCountdown, formatDateCN, daysBetween } from '../lib/utils.js'
 import { state, PHASE_TEMPLATE, sessionTitleOf } from '../lib/store.js'
 import { icon, brandMark } from '../components/icons.js'
 import { toast } from '../components/ui.js'
+import { createLoginScene } from '../components/login-scene.js'
 import {
   isCloudConfigured,
   currentUser,
@@ -51,9 +52,9 @@ export const AUTH_ROUTES = ['login', 'signup', 'forgot', 'reset']
  * 它不属于认证流程，但必须让路由认得它 —— 否则「未登录 → 地址收敛到 #login」
  * 那条规则会把 `#scene` 一起吃掉。
  *
- * 移植收尾时把这一项和 main.js 里的 DEV_HASHES 分支一起删掉即可。
+ * Vite DEV 才开放；正式构建不会暴露该路由和诊断接口。
  */
-export const DEV_ROUTES = ['scene']
+export const DEV_ROUTES = import.meta.env.DEV ? ['scene'] : []
 
 /**
  * 登录成功的那一刻要通知外面「可以装外壳了」。
@@ -108,19 +109,48 @@ export function renderLogin(ctx) {
   const note = carryNote
   carryNote = ''
 
+  let disposed = false
+  let entering = false
+  const scene = createLoginScene()
+  const loginCtx = {
+    ...ctx,
+    async entered(user, message) {
+      // 异步认证可能晚于路由切换返回，旧表单不能接管新视图。
+      if (disposed || entering) return
+      entering = true
+      root.dataset.entering = 'true'
+      root.setAttribute('aria-busy', 'true')
+      const inner = root.querySelector('.auth__inner')
+      inner.inert = true
+      try {
+        await scene.enter(root)
+        if (!disposed) entered(user, message)
+      } finally {
+        inner.inert = false
+        root.removeAttribute('aria-busy')
+      }
+    }
+  }
+
   const content =
     mode === 'reset'
-      ? resetPanel(ctx)
+      ? resetPanel(loginCtx)
       : mode === 'forgot'
-        ? forgotPanel(ctx)
+        ? forgotPanel(loginCtx)
         : mode === 'signup'
-          ? signupPanel(ctx)
-          : loginPanel(ctx)
+          ? signupPanel(loginCtx)
+          : loginPanel(loginCtx)
 
-  return el('div', { class: 'auth', dataset: { mode } }, [
+  const root = el('div', { class: 'auth auth--scene', dataset: { mode } }, [
     authBackdrop(),
-    el('div', { class: 'auth__inner' }, [briefing(), accessDesk(content, mode, note)])
+    el('div', { class: 'auth__inner' }, [briefing(scene.node), accessDesk(content, mode, note)])
   ])
+  ctx.onDestroy(() => {
+    disposed = true
+    scene.dispose()
+  })
+  scene.mount()
+  return root
 }
 
 /**
@@ -145,7 +175,7 @@ function authBackdrop() {
 
 /* ---------------- 左栏：这场作战本身 ---------------- */
 
-function briefing() {
+function briefing(sceneNode) {
   const cd = examCountdown(state.profile.examDate)
   // 备考进度：起点取 profile.studyStartDate（首次设置初试日期时自动记下），与首页口径一致。
   // 之前是 (460 - days)/460 硬算，等于假设备考期固定 460 天，一改初试日期这个百分比就失真。
@@ -183,6 +213,7 @@ function briefing() {
         el('p', { class: 'auth-brand__sub' }, `${sessionTitleOf(state.profile.examDate)} · 学园事务局`)
       ])
     ]),
+    sceneNode,
     el('div', { class: 'auth-mission__count' }, [halo, label, num]),
     el('div', { class: 'auth-mission__foot' }, [
       // 没设备考起点就不显示百分比（不能留个 null% 或 NaN%）
@@ -281,7 +312,7 @@ function loginPanel(ctx) {
       await signInWithPassword(mail, pass)
       const user = await currentUser()
       if (!user) throw invalid(password, '登录没有成功，请再试一次')
-      entered(user, '登录成功')
+      await ctx.entered(user, '登录成功')
     },
     footer: el('div', { class: 'auth-links' }, [
       el('button', {
@@ -433,7 +464,7 @@ function signupPanel(ctx) {
       }
       const user = await currentUser()
       if (!user) throw invalid(email, '注册没有成功，请再试一次')
-      entered(user, '账号已建好，欢迎')
+      await ctx.entered(user, '账号已建好，欢迎')
     },
     footer: el('div', { class: 'auth-links' }, [
       el('button', {

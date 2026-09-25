@@ -1,0 +1,5 @@
+import { chromium } from 'playwright'; import { writeFile } from 'node:fs/promises';
+const b=await chromium.launch();const p=await b.newPage({viewport:{width:480,height:270}});await p.goto('http://127.0.0.1:4330/');
+await p.evaluate(async()=>{const {SceneStage}=await import('/src/lib/scene-stage.js');document.body.innerHTML='<canvas style="width:480px;height:270px"></canvas>';window.s=new SceneStage(document.querySelector('canvas'),{scene:'night_1'});await s.load();s.update(2)});
+console.log(await p.evaluate(()=>s.items.get('office-night').skeleton.slots.filter(x=>x.getAttachment()?.name?.includes('Water')).map(x=>({name:x.getAttachment().name,c:x.color,ac:x.getAttachment().color,dark:x.darkColor,blend:x.data.blendMode}))));
+for(const two of [true,false]){const url=await p.evaluate(two=>{s.renderer.dispose();s.renderer=new s.webgl.SceneRenderer(s.canvas,s.glContext,two);s.camera=s.renderer.camera;s.resize();s.fitScene();return s.snapshot()},two);await writeFile(`output/shittim/night-twocolor-${two}.png`,Buffer.from(url.split(',')[1],'base64'))} await b.close();

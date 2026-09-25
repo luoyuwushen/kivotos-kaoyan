@@ -1,5 +1,5 @@
 arona_workpage_daytime_2.png
-size:2048,2048
+size:4096,4096
 filter:Linear,Linear
 scale:1.24
 A_00_B_Arm
@@ -773,7 +773,7 @@ offsets:2040,830,3960,2706
 rotate:270
 
 arona_workpage_daytime_2_2.png
-size:2048,2048
+size:4096,4096
 filter:Linear,Linear
 scale:1.24
 BGF/Black00_F_Hair

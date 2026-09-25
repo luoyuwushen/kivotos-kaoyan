@@ -20,6 +20,12 @@
     "audit:encoding": "node scripts/check-encoding.mjs",
     "verify:live": "node scripts/verify-live.mjs",
     "verify:live:design": "node scripts/verify-live-design.mjs",
+    "verify:login": "node scripts/verify-login.mjs",
+    "verify:notices": "node scripts/verify-notices.mjs",
+    "verify:tracks": "node scripts/verify-scene-tracks.mjs",
+    "verify:shittim": "node scripts/verify-shittim-login.mjs",
+    "verify:shittim:render": "node scripts/verify-shittim-render.mjs",
+    "stage:shittim": "node scripts/stage-shittim.mjs",
     "ba-recon": "node scripts/ba-recon.mjs"
   },
   "devDependencies": {

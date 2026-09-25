@@ -42,7 +42,6 @@ import { renderGoals } from './views/goals.js'
 import { renderMedals } from './views/medals.js'
 import { renderSettings, applyTheme } from './views/settings.js'
 import { renderLogin, renderAuthLoading, renderAuthNoBackend, setAuthEnteredHandler, AUTH_ROUTES, DEV_ROUTES } from './views/login.js'
-import { renderSceneProbe } from './views/scene-probe.js'
 
 /* ---------------- 导航定义 ---------------- */
 
@@ -277,7 +276,10 @@ function render() {
   // 如果这时候按「有外壳就当进了应用」来判断，第二遍就会把登录屏顶掉、直接放人进首页。
   // 所以判据是「等登录」这件事本身，而不是「外壳在不在」。
   if (awaitingAuth) {
+    // 登录成功后的过场拥有本次进入权；数据订阅或 hashchange 不能销毁它。
+    if (authHostNode.querySelector('.auth[data-entering="true"]')) return
     if (!isCloudConfigured()) {
+      destroyView()
       mount(authHostNode, renderAuthNoBackend())
       return
     }
@@ -285,7 +287,14 @@ function render() {
     // 开发用探针：不受登录门禁影响（它本来就是为了在没登录时调场景）
     if (DEV_HASHES.has(route)) {
       destroyView()
-      mount(authHostNode, renderSceneProbe(makeCtx(route)))
+      if (import.meta.env.DEV) {
+        import('./views/scene-probe.js').then(({ renderSceneProbe }) => {
+          if (awaitingAuth && parseRoute() === 'scene') {
+            destroyView()
+            mount(authHostNode, renderSceneProbe(makeCtx(route)))
+          }
+        })
+      }
       document.title = '场景探针 · ' + (state.profile.siteName || '基沃托斯作战本部')
       return
     }
@@ -294,6 +303,8 @@ function render() {
       location.replace(`${location.pathname}${location.search}#login`)
       return
     }
+    // 同一步骤里的数据通知不应重建表单、清空密码或重复创建 WebGL 上下文。
+    if (authHostNode.querySelector('.auth')?.dataset.mode === (route || 'login')) return
     destroyView()
     mount(authHostNode, renderLogin(makeCtx(route || 'login')))
     document.title = '登录 · ' + (state.profile.siteName || '基沃托斯作战本部')
@@ -313,6 +324,7 @@ function render() {
 
   // 清理上一个视图的定时器 / 订阅
   destroyView()
+  authHostNode.replaceChildren()
 
   const view = entry.render(makeCtx(currentView))
 

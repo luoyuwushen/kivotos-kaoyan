@@ -1,15 +1,9 @@
-# public/shittim —— 登录场景素材（移植自 ShittimLogon）
+# ShittimLogon 登录场景素材
 
-> 这些**不是本项目的原创素材**。角色与场景的 Spine 导出数据（骨骼、贴图、图集）
-> 权利属于其原权利人（《蔚蓝档案》相关权利人）；Spine 运行时 © Esoteric Originals LLC。
-> 详细来源与许可见仓库根目录 `docs/shittim-port.md`。
+角色与场景素材来自 ShittimLogon 1.4.1，非本站原创，相关版权属于 Nexon / Yostar 及原权利人。Spine 运行时 © Esoteric Software LLC，按 Spine Runtimes License 使用。详见 docs/shittim-port.md。
 
-由 `scripts/stage-shittim.mjs` 从 ShittimLogon 发行版搬运生成，不要手改。
+本站为个人备考自用的非商业网站，无广告、无收费、无任何形式的盈利。如有版权问题，请联系 2651038380@qq.com。
 
-| 文件 | 用途 |
-|------|------|
-| `*_spr.skel/.atlas/.png` | 阿洛娜（arona）与普拉娜（NP0035）角色骨骼 |
-| `arona_workpage_*.skel/.atlas/.png` | 办公室场景（日间 / 夜间），各两页贴图 |
-| `enter_splash*.png` | 登录成功那一刻的进入画面 |
+由 scripts/stage-shittim.mjs 生成。本次图集缩放比例：1。原 PNG 的真实尺寸与源 atlas 声明一致；旋转区域按实际占用范围验证，偏移不裁切。骨架几何无需随贴图分辨率调整。
 
-本次搬运缩放比例：0.5
+workpage 包含角色和背景；thumb-*.png 用于加载中与 WebGL 不可用时的同幕静态图；enter_splash*.png 用于进入动画。

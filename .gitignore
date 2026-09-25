@@ -9,6 +9,7 @@ dist-verify/
 *-shots/
 *-shots*/
 smoke-shots/
+/output/
 live-final/
 live-verify/
 ui-*.png

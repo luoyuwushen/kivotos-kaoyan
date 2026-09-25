@@ -30,7 +30,7 @@ const TEST_USER = { id: '00000000-0000-4000-8000-0000000000aa', email: 'local-te
 /** 产物里烘焙的 Supabase 地址（扫所有 chunk） */
 export function bakedSupabaseUrl() {
   try {
-    const dir = new URL('../dist/assets/', import.meta.url)
+    const dir = new URL('../../dist/assets/', import.meta.url)
     for (const file of readdirSync(dir).filter((f) => f.endsWith('.js'))) {
       const code = readFileSync(new URL(file, dir), 'utf8')
       const m = /https:\/\/[a-z0-9-]+\.supabase\.(?:co|in)/.exec(code)
@@ -98,8 +98,7 @@ export function fakeSession(user = TEST_USER) {
  */
 export async function installFakeBackend(page, { seedState, seedMeta } = {}) {
   const url = bakedSupabaseUrl()
-  if (url) {
-    await page.route(`${url}/**`, (route) => {
+  const respond = (route) => {
       const method = route.request().method()
       // PostgREST 读取用 null 表示"没有行"，写入回 201 空体；auth 端点回空对象就够
       const body = method === 'GET' ? 'null' : '{}'
@@ -108,8 +107,10 @@ export async function installFakeBackend(page, { seedState, seedMeta } = {}) {
         contentType: 'application/json',
         body
       })
-    })
   }
+  // dev server 没有构建产物；仍须拦住所有 Supabase 请求，绝不能悄悄外发。
+  await page.route(/^https?:\/\/[^/]+\.supabase\.(?:co|in)\//, respond)
+  if (url) await page.route(`${url}/**`, respond)
 
   await page.addInitScript(({ authKey, session, storageKey, metaKey, seedState, seedMeta }) => {
     localStorage.setItem(authKey, JSON.stringify(session))
